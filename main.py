@@ -171,6 +171,14 @@ def compute_features(df):
     df['5_WIN'] = strokeratio5_list
     df['7_WIN'] = strokeratio7_list
 
+    df['vRatio'].fillna(value=df['vRatio'].mean(), inplace=True)
+    df['alpha'].fillna(value=df['alpha'].mean(), inplace=True)
+    df['dAlpha'].fillna(value=df['dAlpha'].mean(), inplace=True)
+    df['SIN'].fillna(value=df['SIN'].mean(), inplace=True)
+    df['COS'].fillna(value=df['COS'].mean(), inplace=True)
+    df['5_WIN'].fillna(value=df['5_WIN'].mean(), inplace=True)
+    df['7_WIN'].fillna(value=df['7_WIN'].mean(), inplace=True)
+
     return
 
 
