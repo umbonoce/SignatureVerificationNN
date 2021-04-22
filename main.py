@@ -2,10 +2,8 @@ import numpy as np
 import math
 import os
 import pandas as pd
+import sklearn
 from hmmlearn import hmm
-import matplotlib.pyplot as plt
-
-
 np.random.seed(42)  # pseudorandomic
 
 
@@ -66,8 +64,8 @@ def initialize_dataset(sign_dict):
             df['X'] = normalization(df['X'])
             df['Y'] = normalization(df['Y'])
             df['Z'] = normalization(df['Z'])
-            compute_features(df)
-            print(df)
+            df = compute_features(df)
+
         for df in sign_dict[user]['skilled']:
             del df['TIMESTAMP']
             del df['AZIMUTH']
@@ -75,9 +73,9 @@ def initialize_dataset(sign_dict):
             df['X'] = normalization(df['X'])
             df['Y'] = normalization(df['Y'])
             df['Z'] = normalization(df['Z'])
-            compute_features(df)
-            print(df)
-    return
+            df = compute_features(df)
+
+    return sign_dict
 
 
 def compute_features(df):
@@ -179,9 +177,50 @@ def compute_features(df):
     df['5_WIN'].fillna(value=df['5_WIN'].mean(), inplace=True)
     df['7_WIN'].fillna(value=df['7_WIN'].mean(), inplace=True)
 
+    return df
+
+
+def feature_selection(x_train,y_train):
+
+    features = [None] * 9
+    model = hmm.GMMHMM(n_components=2, n_mix=16)
+    header = list(x_train[0].columns.values)
+    concatenation = x_train[0]
+
+
+    for i in range (1,len(x_train)):
+        concatenation = np.concatenate([concatenation,x_train[i]])
+
+    x_dataset=pd.DataFrame(data=concatenation,columns=header)
+    index=0
+    while index<9:
+        for f in header:
+            print(x_dataset[f].shape)
+            print(model.fit(np.array(x_dataset[f]).reshape(-1,1), np.array(y_train)))
+
+
+        i+=1
+
     return
+
 
 
 user_folders = os.listdir('./xLongSignDB')
 df_dict = load_dataset(user_folders)
-initialize_dataset(df_dict)
+#df_dict = initialize_dataset(df_dict)
+
+for user in df_dict:
+    x_train_set = [None] * 41
+    y_train_set = [None] * 41
+    header = [None]* 23
+    i = 0
+    for df in df_dict[user]['genuine']:
+        x_train_set[i] = df
+        y_train_set[i] = len(df)
+        i = i + 1
+        if (i == 41):
+            break
+
+    #x_train_set = pd.DataFrame(data=x_train_set, columns=header)
+    #y_train_set = pd.DataFrame(data=y_train_set,columns=['Label'])
+    feature_selection(x_train_set,y_train_set)
