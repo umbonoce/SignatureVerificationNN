@@ -16,6 +16,10 @@ def normalization(data):
     std = data.std() + np.finfo(np.float32).eps
     return 0.5 * (np.tanh(0.01 * ((data - mean) / std)) + 1)
 
+def ZNormalization(df):
+    column_maxes = df.max()
+    df_max = column_maxes.max()
+    return df / df_max
 
 # time derivative approsimation
 def second_order_regression(data_list):
@@ -62,19 +66,15 @@ def initialize_dataset(sign_dict):
             del df['TIMESTAMP']
             del df['AZIMUTH']
             del df['ALTITUDE']
-            df['X'] = normalization(df['X'])
-            df['Y'] = normalization(df['Y'])
-            df['Z'] = normalization(df['Z'])
             df = compute_features(df)
+            df = ZNormalization(df)
 
         for df in sign_dict[user]['skilled']:
             del df['TIMESTAMP']
             del df['AZIMUTH']
             del df['ALTITUDE']
-            df['X'] = normalization(df['X'])
-            df['Y'] = normalization(df['Y'])
-            df['Z'] = normalization(df['Z'])
             df = compute_features(df)
+            df = ZNormalization(df)
 
     return sign_dict
 
@@ -196,12 +196,13 @@ def feature_selection(x_train, y_train):
     subset = set()  # empty set ("null set") so that the k = 0 (where k is the size of the subset)
     total_features = set(header)
 
-    while k != 3:
+    while k != 2:
         best_score = 0
         best_feature = ""
         copy = subset.copy()
         for f in (total_features - subset):
             copy.add(f)
+            print(f)
             score = evaluate_score(x_train, list(copy), y_train, header)
             copy.remove(f)
             if score > best_score:
@@ -209,19 +210,19 @@ def feature_selection(x_train, y_train):
                 best_feature = f
 
         subset.add(best_feature)
-        worst_score = np.inf
+        worst_score = 0
         worst_feature = ""
         copy = subset.copy()
 
         if len(subset) > 1:
             for f in subset:
                 copy.remove(f)
+                print(f)
                 score = evaluate_score(x_train, list(copy), y_train, header)
                 copy.add(f)
-                if score < worst_score:
+                if score > worst_score:
                     worst_score = score
                     worst_feature = f
-
             if worst_feature == best_feature:
                 k += 1
             else:
@@ -234,10 +235,9 @@ def feature_selection(x_train, y_train):
 
 def evaluate_score(x_dataset,features,y_dataset, header):
 
-    kf = KFold(n_splits=6, shuffle=True, random_state=42)
+    kf = KFold(n_splits=3, shuffle=True, random_state=42)
     x_array = np.array(x_dataset, dtype=object)
     y_array = np.array(y_dataset)
-
     score_train = 0
     score_test = 0
 
@@ -249,32 +249,35 @@ def evaluate_score(x_dataset,features,y_dataset, header):
         train_df = pd.DataFrame(data=train_df, columns=header)
         train_df = train_df[features]
 
+
         test_df = np.concatenate(x_test)
         test_df = pd.DataFrame(data=test_df, columns=header)
         test_df = test_df[features]
 
-        model = hmm.GMMHMM(n_components=64, n_mix=2, random_state=42)
+        model = hmm.GMMHMM(n_components=2, n_mix=16, random_state=42)
 
-        model.fit(train_df, list(y_train))
+        model.fit(train_df,y_test)
 
         score_train += np.abs(model.score(train_df, y_train))
         score_test += np.abs(model.score(test_df, y_test))
 
-    score_test /= 6
-    score_train /= 6
-
-    return score_train-score_test
+    score_test /= 3
+    score_train /= 3
+    result = score_train-score_test
+    print(result)
+    return result
 
 
 user_folders = os.listdir('./xLongSignDB')
 df_dict = load_dataset(user_folders)
-# df_dict = initialize_dataset(df_dict)
+df_dict = initialize_dataset(df_dict)
 
 for user in df_dict:
     x_train_set = [None] * 41
     y_train_set = [None] * 41
     i = 0
     for df in df_dict[user]['genuine']:
+
         x_train_set[i] = df
         y_train_set[i] = len(df)
         i = i + 1
