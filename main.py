@@ -5,6 +5,8 @@ import pandas as pd
 import sklearn
 from hmmlearn import hmm
 from sklearn.model_selection import KFold
+import warnings
+warnings.filterwarnings("ignore")
 np.random.seed(42)  # pseudorandomic
 
 
@@ -200,21 +202,21 @@ def feature_selection(x_train, y_train):
         copy = subset.copy()
         for f in (total_features - subset):
             copy.add(f)
-            score = evaluate_score(x_train,list(copy), y_train)
+            score = evaluate_score(x_train, list(copy), y_train, header)
             copy.remove(f)
             if score > best_score:
                 best_score = score
                 best_feature = f
 
         subset.add(best_feature)
-        worst_score = 1
+        worst_score = np.inf
         worst_feature = ""
         copy = subset.copy()
 
-        if len(subset) != 1:
+        if len(subset) > 1:
             for f in subset:
                 copy.remove(f)
-                score = evaluate_score(x_train,list(copy), y_train)
+                score = evaluate_score(x_train, list(copy), y_train, header)
                 copy.add(f)
                 if score < worst_score:
                     worst_score = score
@@ -230,22 +232,38 @@ def feature_selection(x_train, y_train):
     return subset
 
 
+def evaluate_score(x_dataset,features,y_dataset, header):
 
+    kf = KFold(n_splits=6, shuffle=True, random_state=42)
+    x_array = np.array(x_dataset, dtype=object)
+    y_array = np.array(y_dataset)
 
-def evaluate_score(x_dataset,features,y_dataset):
-
-    kf = KFold(n_splits=6,shuffle=True)
-    x_test = [None] * 7
-    x_train = [None] * (len(x_dataset)-len(x_test))
-    array = np.array(x_dataset)
+    score_train = 0
+    score_test = 0
 
     for train_index, test_index in kf.split(x_dataset):
-        print("train: "+ str(train_index) +" test: "+str(test_index))
-        x_train, x_test = array[train_index], array[test_index]
+        x_train, x_test = x_array[train_index], x_array[test_index]
+        y_train, y_test = y_array[train_index], y_array[test_index]
 
-    print(len(x_train))
-    print(len(x_test))
-    return np.random.rand()
+        train_df = np.concatenate(x_train)
+        train_df = pd.DataFrame(data=train_df, columns=header)
+        train_df = train_df[features]
+
+        test_df = np.concatenate(x_test)
+        test_df = pd.DataFrame(data=test_df, columns=header)
+        test_df = test_df[features]
+
+        model = hmm.GMMHMM(n_components=64, n_mix=2, random_state=42)
+
+        model.fit(train_df, list(y_train))
+
+        score_train += np.abs(model.score(train_df, y_train))
+        score_test += np.abs(model.score(test_df, y_test))
+
+    score_test /= 6
+    score_train /= 6
+
+    return score_train-score_test
 
 
 user_folders = os.listdir('./xLongSignDB')
@@ -260,10 +278,10 @@ for user in df_dict:
         x_train_set[i] = df
         y_train_set[i] = len(df)
         i = i + 1
-        if (i == 41):
-            break
 
+        if i == 41:
+            break
+    print(user)
     # x_train_set = pd.DataFrame(data=x_train_set, columns=header)
     # y_train_set = pd.DataFrame(data=y_train_set,columns=['Label'])
-    print(x_train_set)
     feature_selection(x_train_set, y_train_set)
