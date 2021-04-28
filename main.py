@@ -2,8 +2,10 @@ import numpy as np
 import math
 import os
 import pandas as pd
-import sklearn
+from dtw import *
 from hmmlearn import hmm
+
+
 from sklearn.model_selection import KFold
 import warnings
 warnings.filterwarnings("ignore")
@@ -67,14 +69,14 @@ def initialize_dataset(sign_dict):
             del df['AZIMUTH']
             del df['ALTITUDE']
             df = compute_features(df)
-            df = ZNormalization(df)
+            df = normalization(df)
 
         for df in sign_dict[user]['skilled']:
             del df['TIMESTAMP']
             del df['AZIMUTH']
             del df['ALTITUDE']
             df = compute_features(df)
-            df = ZNormalization(df)
+            df = normalization(df)
 
     return sign_dict
 
@@ -106,6 +108,7 @@ def compute_features(df):
     for i in range(0, leng):
         dtheta = np.abs(dtheta_list[i] + e)
         v = np.abs(v_list[i] + e)
+
         p_list[i] = math.log(v / dtheta)
         a_list[i] = np.sqrt((dtheta_list[i] * v_list[i]) ** 2 + dv_list[i] ** 2)
 
@@ -183,26 +186,17 @@ def compute_features(df):
 
 def feature_selection(x_train, y_train):
     header = list(x_train[0].columns.values)
-    '''
-        concatenation = x_train[0]
-
-    for i in range(1, len(x_train)):
-        concatenation = np.concatenate([concatenation, x_train[i]])
-
-    x_dataset = pd.DataFrame(data=concatenation, columns=header)
-    '''
 
     k = 0
     subset = set()  # empty set ("null set") so that the k = 0 (where k is the size of the subset)
     total_features = set(header)
 
-    while k != 2:
+    while k != 3:
         best_score = 0
         best_feature = ""
         copy = subset.copy()
         for f in (total_features - subset):
             copy.add(f)
-            print(f)
             score = evaluate_score(x_train, list(copy), y_train, header)
             copy.remove(f)
             if score > best_score:
@@ -213,20 +207,24 @@ def feature_selection(x_train, y_train):
         worst_score = 0
         worst_feature = ""
         copy = subset.copy()
+        print("best "+str(best_feature))
 
         if len(subset) > 1:
+
             for f in subset:
                 copy.remove(f)
-                print(f)
+
                 score = evaluate_score(x_train, list(copy), y_train, header)
                 copy.add(f)
                 if score > worst_score:
                     worst_score = score
                     worst_feature = f
+
             if worst_feature == best_feature:
                 k += 1
             else:
                 subset.remove(worst_feature)
+                print("removed"+str(worst_feature))
         else:
             k += 1
 
@@ -234,14 +232,16 @@ def feature_selection(x_train, y_train):
 
 
 def evaluate_score(x_dataset,features,y_dataset, header):
-
+    print(features)
     kf = KFold(n_splits=3, shuffle=True, random_state=42)
     x_array = np.array(x_dataset, dtype=object)
     y_array = np.array(y_dataset)
     score_train = 0
     score_test = 0
+    result = 0
 
     for train_index, test_index in kf.split(x_dataset):
+
         x_train, x_test = x_array[train_index], x_array[test_index]
         y_train, y_test = y_array[train_index], y_array[test_index]
 
@@ -249,21 +249,33 @@ def evaluate_score(x_dataset,features,y_dataset, header):
         train_df = pd.DataFrame(data=train_df, columns=header)
         train_df = train_df[features]
 
-
         test_df = np.concatenate(x_test)
         test_df = pd.DataFrame(data=test_df, columns=header)
         test_df = test_df[features]
+        try:
 
-        model = hmm.GMMHMM(n_components=2, n_mix=16, random_state=42)
+            model = hmm.GMMHMM(n_components=32, n_mix=2, random_state=42)
 
-        model.fit(train_df,y_test)
+            model.fit(train_df,y_train)
 
-        score_train += np.abs(model.score(train_df, y_train))
-        score_test += np.abs(model.score(test_df, y_test))
+            for signature in x_train:
+                a = pd.DataFrame(data=signature, columns=header)
+                a = a[features]
+                score_train += np.abs(model.score(a))
 
-    score_test /= 3
-    score_train /= 3
-    result = score_train-score_test
+            for signature in x_test:
+                a = pd.DataFrame(data=signature, columns=header)
+                a = a[features]
+                score_test += np.abs(model.score(a))
+
+            result = (score_train - score_test) / 3
+
+        except:
+
+            result = -1
+            print("Fit Training Error")
+
+
     print(result)
     return result
 
@@ -287,4 +299,4 @@ for user in df_dict:
     print(user)
     # x_train_set = pd.DataFrame(data=x_train_set, columns=header)
     # y_train_set = pd.DataFrame(data=y_train_set,columns=['Label'])
-    feature_selection(x_train_set, y_train_set)
+    print(feature_selection(x_train_set, y_train_set))
