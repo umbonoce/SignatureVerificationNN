@@ -4,24 +4,24 @@ import os
 import pandas as pd
 from dtw import *
 from hmmlearn import hmm
-
-
 from sklearn.model_selection import KFold
 import warnings
+import random
 warnings.filterwarnings("ignore")
-np.random.seed(42)  # pseudorandomic
-
 
 # tanh normalization; values between 0 and 1
 def normalization(data):
     mean = data.mean()
     std = data.std() + np.finfo(np.float32).eps
-    return 0.5 * (np.tanh(0.01 * ((data - mean) / std)) + 1)
+    data = 0.5 * (np.tanh(0.01 * ((data - mean) / std)) + 1)
+    return data
+
 
 def ZNormalization(df):
     column_maxes = df.max()
     df_max = column_maxes.max()
     return df / df_max
+
 
 # time derivative approsimation
 def second_order_regression(data_list):
@@ -38,47 +38,73 @@ def second_order_regression(data_list):
     return derivata
 
 
-def load_dataset(users):
-    df_dict = {user: {'skilled': [], 'genuine': []} for user in users}  # dictionary of path names
+def load_dataset(user):
 
-    for user in users:
-        path = './xLongSignDB/' + user
-        files = os.listdir(path)
+    training_list = list()  # dictionary of all training dataframes [1..40]
+    testing_dict = {'skilled': [], 'genuine': []}  # dictionary of all testing dataframes [41..56]
+    training_fs_list = list()  # list of training dataframes (feature selection) [alltrain - validation]
+    validation_fs_dict = {'true': [], 'false': []}  # dictionary of validation dataframes (feature selection) [one true for each session, 18 false random]
+    random.seed(42)  # pseudorandomic
+    path = './xLongSignDB/'
+    path_user = path + str(user) + '/'
+    files = os.listdir(path_user)
+    i = 0
 
-        for file in files:
-            if 'ss' in file:
-                df_dict[user]['skilled'].append(pd.read_csv(path + "/" + file, header=0, skiprows=1, sep=' ',
-                                                            names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH',
-                                                                   'ALTITUDE',
-                                                                   'Z']))
+    for file in files:
+        print(file)
+        df = pd.read_csv(path_user + file, header=0, sep=' ', names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
+        df = initialize_dataset(df)
 
-            elif 'sg' in file:
-                df_dict[user]['genuine'].append(pd.read_csv(path + "/" + file, header=0, skiprows=1, sep=' ',
-                                                            names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH',
-                                                                   'ALTITUDE', 'Z']))
+        if 'ss' in file:
+            testing_dict['skilled'].append(df)
+
+        elif 'sg' in file:
+            i += 1
+
+            if i > 41:
+                testing_dict['genuine'].append(df)
             else:
-                print(file)
+                training_list.append(df)
+                if i % 4 == 0:
+                    validation_fs_dict['true'].append(df)
+                else:
+                    training_fs_list.append(df)
 
-    return df_dict
+        else:
+            print(file)
+
+    for i in range(0, 20):
+        numbers = [x for x in range(1, 30)]
+        numbers.remove(user)
+        y = random.choice(numbers)
+        path_user = path + str(y) + '/'
+        files = os.listdir(path_user)
+        z = random.randint(10, 40)
+        df = pd.read_csv(path_user + files[z], header=0, sep=' ', names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
+        df = initialize_dataset(df)
+        validation_fs_dict['false'].append(df)
+
+    print("training:")
+    print(len(training_list)) #40
+    print("testing:")
+    print(len(testing_dict['skilled'])) #10
+    print(len(testing_dict['genuine'])) #5
+    print("training fs:")
+    print(len(training_fs_list)) #31
+    print("validation fs:")
+    print(len(validation_fs_dict['true'])) #9
+    print(len(validation_fs_dict['false'])) #18
+
+    return training_list, testing_dict, training_fs_list, validation_fs_dict
 
 
-def initialize_dataset(sign_dict):
-    for user in sign_dict:
-        for df in sign_dict[user]['genuine']:
-            del df['TIMESTAMP']
-            del df['AZIMUTH']
-            del df['ALTITUDE']
-            df = compute_features(df)
-            df = normalization(df)
-
-        for df in sign_dict[user]['skilled']:
-            del df['TIMESTAMP']
-            del df['AZIMUTH']
-            del df['ALTITUDE']
-            df = compute_features(df)
-            df = normalization(df)
-
-    return sign_dict
+def initialize_dataset(df):
+    del df['TIMESTAMP']
+    del df['AZIMUTH']
+    del df['ALTITUDE']
+    df = compute_features(df)
+    df = normalization(df)
+    return df
 
 
 def compute_features(df):
@@ -256,7 +282,7 @@ def evaluate_score(x_dataset,features,y_dataset, header):
 
             model = hmm.GMMHMM(n_components=32, n_mix=2, random_state=42)
 
-            model.fit(train_df,y_train)
+            model.fit(train_df, y_train)
 
             for signature in x_train:
                 a = pd.DataFrame(data=signature, columns=header)
@@ -280,23 +306,6 @@ def evaluate_score(x_dataset,features,y_dataset, header):
     return result
 
 
-user_folders = os.listdir('./xLongSignDB')
-df_dict = load_dataset(user_folders)
-df_dict = initialize_dataset(df_dict)
+training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(1)
 
-for user in df_dict:
-    x_train_set = [None] * 41
-    y_train_set = [None] * 41
-    i = 0
-    for df in df_dict[user]['genuine']:
-
-        x_train_set[i] = df
-        y_train_set[i] = len(df)
-        i = i + 1
-
-        if i == 41:
-            break
-    print(user)
-    # x_train_set = pd.DataFrame(data=x_train_set, columns=header)
-    # y_train_set = pd.DataFrame(data=y_train_set,columns=['Label'])
-    print(feature_selection(x_train_set, y_train_set))
+print(training_list)
