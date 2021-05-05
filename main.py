@@ -9,6 +9,7 @@ import warnings
 import random
 warnings.filterwarnings("ignore")
 
+
 # tanh normalization; values between 0 and 1
 def normalization(data):
     mean = data.mean()
@@ -17,7 +18,7 @@ def normalization(data):
     return data
 
 
-def ZNormalization(df):
+def z_normalization(df):
     column_maxes = df.max()
     df_max = column_maxes.max()
     return df / df_max
@@ -51,7 +52,6 @@ def load_dataset(user):
     i = 0
 
     for file in files:
-        print(file)
         df = pd.read_csv(path_user + file, header=0, sep=' ', names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
         df = initialize_dataset(df)
 
@@ -83,17 +83,6 @@ def load_dataset(user):
         df = pd.read_csv(path_user + files[z], header=0, sep=' ', names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
         df = initialize_dataset(df)
         validation_fs_dict['false'].append(df)
-
-    print("training:")
-    print(len(training_list)) #40
-    print("testing:")
-    print(len(testing_dict['skilled'])) #10
-    print(len(testing_dict['genuine'])) #5
-    print("training fs:")
-    print(len(training_fs_list)) #31
-    print("validation fs:")
-    print(len(validation_fs_dict['true'])) #9
-    print(len(validation_fs_dict['false'])) #18
 
     return training_list, testing_dict, training_fs_list, validation_fs_dict
 
@@ -210,39 +199,40 @@ def compute_features(df):
     return df
 
 
-def feature_selection(x_train, y_train):
-    header = list(x_train[0].columns.values)
+def feature_selection(training_set, validation_set):
 
-    k = 0
+    header = list(training_set[0].columns.values)
+    k = 0  # counter number of feature to select
     subset = set()  # empty set ("null set") so that the k = 0 (where k is the size of the subset)
     total_features = set(header)
 
-    while k != 3:
-        best_score = 0
+    while k != 9:
+
+        best_score = 1
         best_feature = ""
-        copy = subset.copy()
+        feature_set = subset.copy()
+
         for f in (total_features - subset):
-            copy.add(f)
-            score = evaluate_score(x_train, list(copy), y_train, header)
-            copy.remove(f)
-            if score > best_score:
+            feature_set.add(f)
+            score = evaluate_score(training_set, list(feature_set), validation_set, header)
+            feature_set.remove(f)
+            if score < best_score:
                 best_score = score
                 best_feature = f
 
         subset.add(best_feature)
-        worst_score = 0
+        worst_score = 1
         worst_feature = ""
-        copy = subset.copy()
+        feature_set = subset.copy()
         print("best "+str(best_feature))
 
         if len(subset) > 1:
 
             for f in subset:
-                copy.remove(f)
-
-                score = evaluate_score(x_train, list(copy), y_train, header)
-                copy.add(f)
-                if score > worst_score:
+                feature_set.remove(f)
+                score = evaluate_score(training_set, list(feature_set), validation_set, header)
+                feature_set.add(f)
+                if score < worst_score:
                     worst_score = score
                     worst_feature = f
 
@@ -257,55 +247,85 @@ def feature_selection(x_train, y_train):
     return subset
 
 
-def evaluate_score(x_dataset,features,y_dataset, header):
+def evaluate_score(training_set, features, validation_set, header):
+
     print(features)
-    kf = KFold(n_splits=3, shuffle=True, random_state=42)
-    x_array = np.array(x_dataset, dtype=object)
-    y_array = np.array(y_dataset)
+
+    y_train = [len(x) for x in training_set]
+
+    train_df = np.concatenate(training_set)
+    train_df = pd.DataFrame(data=train_df, columns=header)
+    train_df = train_df[features]
+
+    # test_df = np.concatenate(validation_set)
+    # test_df = pd.DataFrame(data=test_df, columns=header)
+    # test_df = test_df[features]
+
     score_train = 0
     score_test = 0
+    average_score = 0
     result = 0
+    count_training = 0
+    count_validation = 0
+    min_score = np.inf
+    false_acceptance = 0
+    false_rejection = 0
 
-    for train_index, test_index in kf.split(x_dataset):
+    try:
 
-        x_train, x_test = x_array[train_index], x_array[test_index]
-        y_train, y_test = y_array[train_index], y_array[test_index]
+        model = hmm.GMMHMM(n_components=32, n_mix=2, random_state=42)
 
-        train_df = np.concatenate(x_train)
-        train_df = pd.DataFrame(data=train_df, columns=header)
-        train_df = train_df[features]
+        model.fit(train_df, y_train)
 
-        test_df = np.concatenate(x_test)
-        test_df = pd.DataFrame(data=test_df, columns=header)
-        test_df = test_df[features]
-        try:
+        for signature in training_set:
+            a = pd.DataFrame(data=signature, columns=header)
+            a = a[features]
+            score_train = model.score(a)
+            if score_train < min_score:
+                min_score = score_train
+            average_score += score_train
+            count_training += 1
 
-            model = hmm.GMMHMM(n_components=32, n_mix=2, random_state=42)
+        average_score /= 31
+        distance = np.abs(min_score - score_train)
+        threshold = np.exp(distance * (-1) / len(features))
 
-            model.fit(train_df, y_train)
+        for signature in validation_set["true"]:
+            a = pd.DataFrame(data=signature, columns=header)
+            a = a[features]
+            distance = np.abs(model.score(a) - score_train)
+            score_test = np.exp(distance*(-1)/len(features))
+            count_validation += 1
+            if score_test < threshold:
+                false_rejection += 1
 
-            for signature in x_train:
-                a = pd.DataFrame(data=signature, columns=header)
-                a = a[features]
-                score_train += np.abs(model.score(a))
+        for signature in validation_set["false"]:
+            a = pd.DataFrame(data=signature, columns=header)
+            a = a[features]
+            distance = np.abs(model.score(a) - score_train)
+            score_test = np.exp(distance*(-1)/len(features))
+            count_validation += 1
+            if score_test >= threshold:
+                false_acceptance += 1
 
-            for signature in x_test:
-                a = pd.DataFrame(data=signature, columns=header)
-                a = a[features]
-                score_test += np.abs(model.score(a))
+        # probabilità da chiedere
+        false_acceptance_rate = false_acceptance / len(validation_set["false"])
+        false_rejection_rate = false_rejection / len(validation_set["true"])
+        probability_false = len(validation_set["false"])/(len(validation_set["false"])+len(validation_set["true"]))
+        probability_true = 1 - probability_false
+        equal_error_rate = (false_rejection_rate * probability_true) + (false_acceptance_rate * probability_false)
+        print(f"false acceptance: {false_acceptance}; false rejection: {false_rejection}; "
+              f"far: {false_rejection_rate}; frr: {false_rejection_rate};");
 
-            result = (score_train - score_test) / 3
+    except:
 
-        except:
-
-            result = -1
-            print("Fit Training Error")
+        equal_error_rate = 1
+        print("Fit Training Error")
 
 
-    print(result)
-    return result
+    print(f"equal error rate: {equal_error_rate}")
+    return equal_error_rate
 
 
 training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(1)
-
-print(training_list)
+feature_selection(training_fs_list, validation_fs_dict)
