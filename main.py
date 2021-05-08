@@ -336,7 +336,7 @@ def test_evaluation(training_set, features, validation_set):
     false_acceptance = 0
     false_rejection = 0
 
-    model = hmm.GMMHMM(n_components=2, n_mix=16, random_state=42)
+    model = hmm.GMMHMM(n_components=2, n_mix=2, random_state=42)
 
     model.fit(train_df, y_train)
 
@@ -381,15 +381,38 @@ def test_evaluation(training_set, features, validation_set):
     return equal_error_rate
 
 
-for i in range(1, 30):
+score_exp1 = [None] * 29
+score_exp2 = [None] * 29
+score_exp3 = [None] * 29
+score_exp4 = [None] * 29
+score_exp5 = [None] * 29
+score_exp6 = [None] * 29
 
-    training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
-    subset, eer = feature_selection(training_fs_list, validation_fs_dict)
-    with open('features.csv', mode='a') as feature_file:
-        feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        subset = list(subset)
-        subset.append(eer)
-        feature_writer.writerow(subset)
+# subset, eer = feature_selection(training_fs_list, validation_fs_dict)
+with open('features.csv', mode='r') as feature_file:
+    feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    i = 0
+    for fs in feature_reader:
+        if i > 0:
+            print(fs)
+            fs.pop()
+            print(i)
+            training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
+            score_exp1[i-1] = test_evaluation(training_list[0:4], fs, testing_dict)
+            score_exp2[i-1] = test_evaluation(training_list[4:8], fs, testing_dict)
+            score_exp3[i-1] = test_evaluation(training_list[8:12], fs, testing_dict)
+            score_exp4[i-1] = test_evaluation(training_list[12:16], fs, testing_dict)
+            score_exp5[i-1] = test_evaluation(training_list[21:26], fs, testing_dict)
+            score_exp6[i-1] = test_evaluation(training_list[36:41], fs, testing_dict)
+        i += 1
+
+    eer1 = np.mean(score_exp1)
+    eer2 = np.mean(score_exp2)
+    eer3 = np.mean(score_exp3)
+    eer4 = np.mean(score_exp4)
+    eer5 = np.mean(score_exp5)
+    eer6 = np.mean(score_exp6)
+    print(eer1, eer2, eer3, eer4, eer5, eer6)
 
 
 # fs = ['Y', 'ro', 'SIN', 'ac', 'ddY', 'theta', 'COS', 'v', 'dY']
