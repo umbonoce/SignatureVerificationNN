@@ -9,6 +9,7 @@ import warnings
 import random
 warnings.filterwarnings("ignore")
 import csv
+import matplotlib.pyplot as plt
 
 
 # tanh normalization; values between 0 and 1
@@ -320,7 +321,7 @@ def evaluate_score(training_set, features, validation_set, header):
     return equal_error_rate
 
 
-def test_evaluation(training_set, features, validation_set):
+def test_evaluation(training_set, features, validation_set, i):
 
     header = list(training_list[0].columns.values)
 
@@ -329,56 +330,111 @@ def test_evaluation(training_set, features, validation_set):
     train_df = np.concatenate(training_set)
     train_df = pd.DataFrame(data=train_df, columns=header)
     train_df = train_df[features]
+    min_eer = 1
 
-    score_train = [None] * (len(training_set))
-    count_training = 0
-    count_validation = 0
-    false_acceptance = 0
-    false_rejection = 0
+    for n in range (2,64,2):
 
-    model = hmm.GMMHMM(n_components=2, n_mix=2, random_state=42)
+        try:
+            score_train = [None] * (len(training_set))
+            score_gen = [None] * (len(validation_set["genuine"]))
+            score_sk = [None] * (len(validation_set["skilled"]))
+            count_training = 0
+            count_validation = 0
+            false_acceptance = 0
+            false_rejection = 0
 
-    model.fit(train_df, y_train)
+            print(f"number of components: {n}")
 
-    for signature in training_set:
-        a = pd.DataFrame(data=signature, columns=header)
-        a = a[features]
-        score_train[count_training] = model.score(a)
-        count_training += 1
+            model = hmm.GMMHMM(n_components=n, n_mix=2, random_state=42)
 
-    average_score = np.mean(score_train)
-    min_score = np.min(score_train)
-    distance = np.abs(min_score - average_score)
-    threshold = np.exp(distance * (-1) / len(features))
+            model.fit(train_df, y_train)
 
-    for signature in validation_set["genuine"]:
-        a = pd.DataFrame(data=signature, columns=header)
-        a = a[features]
-        distance = np.abs(model.score(a) - average_score)
-        score_test = np.exp(distance*(-1)/len(features))
-        count_validation += 1
-        if score_test < threshold:
-            false_rejection += 1
+            for signature in training_set:
+                a = pd.DataFrame(data=signature, columns=header)
+                a = a[features]
+                score_train[count_training] = model.score(a)
+                count_training += 1
 
-    for signature in validation_set["skilled"]:
-        a = pd.DataFrame(data=signature, columns=header)
-        a = a[features]
-        distance = np.abs(model.score(a) - average_score)
-        score_test = np.exp(distance*(-1)/len(features))
-        count_validation += 1
-        if score_test >= threshold:
-            false_acceptance += 1
+            average_score = np.mean(score_train)
+            min_score = np.min(score_train)
+            distance = np.abs(min_score - average_score)
+            threshold = np.exp(distance * (-1) / len(features))
+            count_training = 0
 
-    false_acceptance_rate = false_acceptance / len(validation_set["skilled"])
-    false_rejection_rate = false_rejection / len(validation_set["genuine"])
-    probability_false = len(validation_set["skilled"])/(len(validation_set["skilled"])+len(validation_set["genuine"]))
-    probability_true = 1 - probability_false
-    equal_error_rate = (false_rejection_rate * probability_true) + (false_acceptance_rate * probability_false)
-    print(f"false acceptance: {false_acceptance}; false rejection: {false_rejection}; "
-          f"far: {false_acceptance_rate}; frr: {false_rejection_rate};")
-    print(f"equal error rate: {equal_error_rate}")
+            for i in range(0, len(score_train)):
+                distance = np.abs(score_train[count_training] - average_score)
+                score_train[count_training] = np.exp(distance * (-1) / len(features))
+                count_training += 1
 
-    return equal_error_rate
+            for signature in validation_set["genuine"]:
+                a = pd.DataFrame(data=signature, columns=header)
+                a = a[features]
+                distance = np.abs(model.score(a) - average_score)
+                score_test = np.exp(distance*(-1)/len(features))
+                score_gen[count_validation] = score_test
+                count_validation += 1
+                if score_test < threshold:
+                    false_rejection += 1
+
+            count_validation = 0
+
+            for signature in validation_set["skilled"]:
+                a = pd.DataFrame(data=signature, columns=header)
+                a = a[features]
+                distance = np.abs(model.score(a) - average_score)
+                score_test = np.exp(distance*(-1)/len(features))
+                score_sk[count_validation] = score_test
+                count_validation += 1
+                if score_test >= threshold:
+                    false_acceptance += 1
+
+            concatenate_array = z_normalization(np.concatenate((score_train, score_gen, score_sk, [threshold])))
+            score_train = concatenate_array[0:len(score_train)]
+            score_gen = concatenate_array[len(score_train):len(score_train)+len(score_gen)]
+            score_sk = concatenate_array[len(score_train)+len(score_gen):len(score_train)+len(score_gen)+len(score_sk)]
+            threshold =  concatenate_array[-1]
+
+            print(score_train, score_gen, score_sk, threshold)
+
+            false_acceptance_rate = false_acceptance / len(validation_set["skilled"])
+            false_rejection_rate = false_rejection / len(validation_set["genuine"])
+            probability_false = len(validation_set["skilled"]) / (
+                        len(validation_set["skilled"]) + len(validation_set["genuine"]))
+            probability_true = 1 - probability_false
+            equal_error_rate = (false_rejection_rate * probability_true) + (false_acceptance_rate * probability_false)
+            print(f"false acceptance: {false_acceptance}; false rejection: {false_rejection}; "
+                  f"far: {false_acceptance_rate}; frr: {false_rejection_rate};")
+            print(f"equal error rate: {equal_error_rate}")
+            if equal_error_rate < min_eer:
+                min_eer = equal_error_rate
+                components = n
+
+            plt.figure(figsize=(7, 5))
+            plt.scatter(np.arange(len(score_train)), score_train, c='b', label='trainset')
+            plt.scatter(np.arange(len(score_train), len(score_train) + len(score_sk)), score_sk, c='r',
+                        label='testset - imitation')
+            plt.scatter(np.arange(len(score_train) + len(score_sk), len(score_train) + len(score_sk) + len(score_gen)),
+                        score_gen, c='g', label='testset - original')
+            plt.axhline(y=threshold, color='r', linestyle='-')
+            plt.title(f'User: {i} | HMM states: {n}  | GMM Mixtures: 2')
+            plt.show()
+
+        except:
+            print("error")
+
+    return min_eer
+
+
+"""
+    plt.figure(figsize=(7, 5))
+    plt.scatter(np.arange(len(score_train)), score_train, c='b', label='trainset')
+    plt.scatter(np.arange(len(score_train), len(score_train)+len(score_sk)), score_sk, c='r', label='testset - imitation')
+    plt.scatter(np.arange(len(score_train)+len(score_sk), len(score_train)+len(score_sk)+len(score_gen)), score_gen, c='g', label='testset - original')
+    plt.title(f'User: {i} | HMM states: 32 | GMM components: 2')
+    plt.legend(loc='lower right')
+    plt.show()
+"""
+
 
 
 score_exp1 = [None] * 29
@@ -398,12 +454,12 @@ with open('features.csv', mode='r') as feature_file:
             fs.pop()
             print(i)
             training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
-            score_exp1[i-1] = test_evaluation(training_list[0:4], fs, testing_dict)
-            score_exp2[i-1] = test_evaluation(training_list[4:8], fs, testing_dict)
-            score_exp3[i-1] = test_evaluation(training_list[8:12], fs, testing_dict)
-            score_exp4[i-1] = test_evaluation(training_list[12:16], fs, testing_dict)
-            score_exp5[i-1] = test_evaluation(training_list[21:26], fs, testing_dict)
-            score_exp6[i-1] = test_evaluation(training_list[36:41], fs, testing_dict)
+            score_exp1[i-1] = test_evaluation(training_list[0:4], fs, testing_dict, i)
+            score_exp2[i-1] = test_evaluation(training_list[4:8], fs, testing_dict, i)
+            score_exp3[i-1] = test_evaluation(training_list[8:12], fs, testing_dict, i)
+            score_exp4[i-1] = test_evaluation(training_list[12:16], fs, testing_dict, i)
+            score_exp5[i-1] = test_evaluation(training_list[21:26], fs, testing_dict, i)
+            score_exp6[i-1] = test_evaluation(training_list[36:41], fs, testing_dict, i)
         i += 1
 
     eer1 = np.mean(score_exp1)
@@ -414,6 +470,3 @@ with open('features.csv', mode='r') as feature_file:
     eer6 = np.mean(score_exp6)
     print(eer1, eer2, eer3, eer4, eer5, eer6)
 
-
-# fs = ['Y', 'ro', 'SIN', 'ac', 'ddY', 'theta', 'COS', 'v', 'dY']
-# test_evaluation(training_list[32:36], fs, testing_dict)
