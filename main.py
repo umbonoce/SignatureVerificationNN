@@ -171,7 +171,6 @@ def compute_features(df):
         width = np.max(x_list[n:n + 6]) - np.min(x_list[n:n + 6]) + e
         strokeratio7_list[n] = stroke_len / width
 
-    df['PENSUP']
     df['theta'] = theta_list
     df['v'] = v_list
     df['ro'] = p_list
@@ -201,13 +200,15 @@ def compute_features(df):
     df['5_WIN'].fillna(value=df['5_WIN'].mean(), inplace=True)
     df['7_WIN'].fillna(value=df['7_WIN'].mean(), inplace=True)
 
+    del(df['PENSUP'])
+
     return df
 
 
 def feature_selection(training_set, validation_set):
-    header = list(training_set[0].columns.values)
     k = 0  # counter number of feature to select
     subset = set()  # empty set ("null set") so that the k = 0 (where k is the size of the subset)
+    header = list(training_set[0].columns.values)
     total_features = set(header)
 
     while k != 9:
@@ -251,14 +252,24 @@ def feature_selection(training_set, validation_set):
     return subset, best_score
 
 
-def evaluate_score(training_set, features, validation_set, header):
+def evaluate_score(train_set, features, validation_set, header):
+
+    # training_set = np.concatenate(training_set)
+    # train_set = pd.DataFrame(data=training_set, columns=header)
+    # train_set = train_set[features]
+    print(header)
     print(features)
 
-    y_train = [len(x) for x in training_set]
+    i = 0
+    training_set = train_set.copy()
+    for signature in training_set:
+        training_set[i] = pd.DataFrame(data=signature, columns=features)
+        print(training_set[i])
+        i += 1
 
-    train_df = np.concatenate(training_set)
-    train_df = pd.DataFrame(data=train_df, columns=header)
-    train_df = train_df[features]
+    # train_df = np.concatenate(training_set)
+    # train_df = pd.DataFrame(data=train_df, columns=header)
+    # train_df = train_df[features]
 
     score_train = [None] * (len(training_set))
     count_training = 0
@@ -266,76 +277,7 @@ def evaluate_score(training_set, features, validation_set, header):
     false_acceptance = 0
     false_rejection = 0
 
-    try:
-
-        model = hmm.GMMHMM(n_components=32, n_mix=2, random_state=42)
-
-        model.fit(train_df, y_train)
-
-        for signature in training_set:
-            a = pd.DataFrame(data=signature, columns=header)
-            a = a[features]
-            score_train[count_training] = model.score(a)
-            count_training += 1
-
-        average_score = np.mean(score_train)
-        min_score = np.min(score_train)
-        distance = np.abs(min_score - average_score)
-        threshold = np.exp(distance * (-1) / len(features))
-
-        for signature in validation_set["true"]:
-            a = pd.DataFrame(data=signature, columns=header)
-            a = a[features]
-            distance = np.abs(model.score(a) - average_score)
-            score_test = np.exp(distance * (-1) / len(features))
-            count_validation += 1
-
-            if score_test < threshold:
-                false_rejection += 1
-
-        for signature in validation_set["false"]:
-            a = pd.DataFrame(data=signature, columns=header)
-            a = a[features]
-            distance = np.abs(model.lo(a) - average_score)
-            score_test = np.exp(distance * (-1) / len(features))
-            count_validation += 1
-
-            if score_test >= threshold:
-                false_acceptance += 1
-
-        # probabilità da chiedere
-        false_acceptance_rate = false_acceptance / len(validation_set["false"])
-        false_rejection_rate = false_rejection / len(validation_set["true"])
-        probability_false = len(validation_set["false"]) / (len(validation_set["false"]) + len(validation_set["true"]))
-        probability_true = 1 - probability_false
-        equal_error_rate = (false_rejection_rate * probability_true) + (false_acceptance_rate * probability_false)
-        print(f"false acceptance: {false_acceptance}; false rejection: {false_rejection}; "
-              f"far: {false_rejection_rate}; frr: {false_rejection_rate};");
-
-    except:
-        equal_error_rate = 1
-        print("Fit Training Error")
-
-    print(f"equal error rate: {equal_error_rate}")
-    return equal_error_rate
-
-
-def test_evaluation(training_set, features, validation_set, user):
-    header = list(training_set[0].columns.values)
-
-    train_df = np.concatenate(training_set)
-    train_df = pd.DataFrame(data=train_df, columns=header)
-    train_df = train_df[features]
-
-    score_train = [None] * (len(training_set))
-    score_test_gen = [None] * (len(validation_set["genuine"]))
-    score_test_skilled = [None] * (len(validation_set["skilled"]))
-    count_training = 0
-    count_validation = 0
-    false_acceptance = 0
-    false_rejection = 0
-
-    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X=np.array(train_df))
+    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X = np.array(training_set))
 
     for signature in training_set:
         a = pd.DataFrame(data=signature, columns=header)
@@ -347,12 +289,83 @@ def test_evaluation(training_set, features, validation_set, user):
     min_score = np.min(score_train)
     distance = np.abs(min_score - average_score)
     threshold = np.exp(distance * (-1) / len(features))
+    print(threshold)
+
+    if threshold is not None:
+
+        for signature in validation_set["true"]:
+            a = pd.DataFrame(data=signature, columns=header)
+            a = a[features]
+            distance = np.abs(model.log_probability(np.array(a)) - average_score)
+            score_test = np.exp(distance * (-1) / len(features))
+            count_validation += 1
+
+            if score_test < threshold:
+                false_rejection += 1
+
+        for signature in validation_set["false"]:
+            a = pd.DataFrame(data=signature, columns=header)
+            a = a[features]
+            distance = np.abs(model.log_probability(np.array(a)) - average_score)
+            score_test = np.exp(distance * (-1) / len(features))
+            count_validation += 1
+
+            if score_test >= threshold:
+                false_acceptance += 1
+
+        false_acceptance_rate = false_acceptance / len(validation_set["false"])
+        false_rejection_rate = false_rejection / len(validation_set["true"])
+        probability_false = len(validation_set["false"]) / (len(validation_set["false"]) + len(validation_set["true"]))
+        probability_true = 1 - probability_false
+        equal_error_rate = (false_rejection_rate * probability_true) + (false_acceptance_rate * probability_false)
+        print(f"false acceptance: {false_acceptance}; false rejection: {false_rejection}; "
+              f"far: {false_rejection_rate}; frr: {false_rejection_rate};");
+
+    else:
+
+        equal_error_rate = 1
+        print("Fit Training Error")
+
+    print(f"equal error rate: {equal_error_rate}")
+    return equal_error_rate
+
+
+def test_evaluation(training_set, features, validation_set):
+
+    # print(training_set)
+    # train_df = np.concatenate(training_set)
+
+    i=0
+
+    for signature in training_set:
+        training_set[i] = signature[features]
+        i+=1
+
+    score_train = [None] * (len(training_set))
+    score_test_gen = [None] * (len(validation_set["genuine"]))
+    score_test_skilled = [None] * (len(validation_set["skilled"]))
+    count_training = 0
+    count_validation = 0
+    false_acceptance = 0
+    false_rejection = 0
+
+    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X=np.array(training_set))
+
+    for signature in training_set:
+        print(signature)
+        score_train[count_training] = model.log_probability(signature)
+        print(f"Log prob signature {count_training}: {model.log_probability(signature)}")
+        count_training += 1
+
+    average_score = np.mean(score_train)
+    min_score = np.min(score_train)*0.925
+    distance = np.abs(min_score - average_score)
+    threshold = np.exp(distance * (-1) / len(features))
     print(f"distance score to compute threshold: {distance}, {threshold}")
 
     for signature in validation_set["genuine"]:
-        a = pd.DataFrame(data=signature, columns=header)
-        a = a[features]
-        score_test_gen[count_validation] = model.log_probability(np.array(a))
+        a = signature[features]
+        score_test_gen[count_validation] = model.log_probability(a)
         distance = np.abs(score_test_gen[count_validation] - average_score)
         score_test = np.exp(distance * (-1) / len(features))
         count_validation += 1
@@ -365,9 +378,8 @@ def test_evaluation(training_set, features, validation_set, user):
     count_validation = 0
 
     for signature in validation_set["skilled"]:
-        a = pd.DataFrame(data=signature, columns=header)
-        a = a[features]
-        score_test_skilled[count_validation] = model.log_probability(np.array(a))
+        a = signature[features]
+        score_test_skilled[count_validation] = model.log_probability(a)
         distance = np.abs(score_test_skilled[count_validation] - average_score)
         score_test = np.exp(distance * (-1) / len(features))
         count_validation += 1
@@ -385,6 +397,7 @@ def test_evaluation(training_set, features, validation_set, user):
                 false_acceptance_rate * probability_false)
 
     print(f"false acceptance {false_acceptance}, false rejection {false_rejection},eer{equal_error_rate}")
+
     '''
     length_train = len(score_train)
     length_val = len(score_test_gen) + length_train
@@ -398,9 +411,7 @@ def test_evaluation(training_set, features, validation_set, user):
 
     return equal_error_rate
 
-
-# subset, eer = feature_selection(training_fs_list, validation_fs_dict)
-
+"""
 score_exp1 = [None] * 29
 score_exp2 = [None] * 29
 score_exp3 = [None] * 29
@@ -412,17 +423,29 @@ with open('features.csv', mode='r') as feature_file:
     feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     i = 0
     for (fs) in feature_reader :
-        if i > 0:
+        if i == 25:
             print(fs)
             fs.pop()
             print(i)
             training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
-            score_exp1[i - 1] = test_evaluation(training_list[0:4], fs, testing_dict, i)
-            score_exp2[i - 1] = test_evaluation(training_list[4:8], fs, testing_dict, i)
-            score_exp3[i - 1] = test_evaluation(training_list[8:12], fs, testing_dict, i)
-            score_exp4[i - 1] = test_evaluation(training_list[12:16], fs, testing_dict, i)
-            score_exp5[i - 1] = test_evaluation(training_list[21:25], fs, testing_dict, i)
-            score_exp6[i - 1] = test_evaluation(training_list[36:40], fs, testing_dict, i)
+            """""""
+            if i == 15:
+                print(training_list)
+                print(testing_dict["skilled"])
+                print(testing_dict["genuine"])
+
+            training = training_list[0:4].copy()
+            score_exp1[i - 1] = test_evaluation(training, fs, testing_dict)
+            training = training_list[4:8].copy()
+            score_exp2[i - 1] = test_evaluation(training, fs, testing_dict)
+            training = training_list[8:12].copy()
+            score_exp3[i - 1] = test_evaluation(training, fs, testing_dict)
+            training = training_list[12:16].copy()
+            score_exp4[i - 1] = test_evaluation(training, fs, testing_dict)
+            training = training_list[21:25].copy()
+            score_exp5[i - 1] = test_evaluation(training, fs, testing_dict)
+            training = training_list[36:40].copy()
+            score_exp6[i - 1] = test_evaluation(training, fs, testing_dict)
         i += 1
 
     print(f"1)scores: {score_exp1}")
@@ -440,5 +463,14 @@ with open('features.csv', mode='r') as feature_file:
     eer6 = np.mean(score_exp6)
     print(eer1, eer2, eer3, eer4, eer5, eer6)
 
-# fs = ['Y', 'ro', 'SIN', 'ac', 'ddY', 'theta', 'COS', 'v', 'dY']
-# test_evaluation(training_list[32:36], fs, testing_dict)
+"""
+
+for i in range(1, 30):
+
+    training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
+    subset, eer = feature_selection(training_fs_list, validation_fs_dict)
+    with open('featuresNP.csv', mode='a') as feature_file:
+        feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        subset = list(subset)
+        subset.append(eer)
+        feature_writer.writerow(subset)

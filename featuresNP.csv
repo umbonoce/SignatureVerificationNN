@@ -1,0 +1,5 @@
+dTheta,dZ,X,ro,ac,alpha,dAc,ddX,dX,0.13333333333333333
+SIN,ddY,dTheta,ro,dZ,Y,7_WIN,COS,theta,0.13333333333333333
+dTheta,SIN,X,ddY,dZ,ac,vRatio,7_WIN,dAlpha,0.2
+dTheta,SIN,X,dZ,ro,Z,vRatio,v,dX,0.0
+SIN,dTheta,ro,vRatio,Z,alpha,dAlpha,dX,theta,0.03333333333333333
