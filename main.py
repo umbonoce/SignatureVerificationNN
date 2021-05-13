@@ -97,7 +97,7 @@ def initialize_dataset(df):
     del df['AZIMUTH']
     del df['ALTITUDE']
     df = compute_features(df)
-    # df = normalization(df)
+    df = normalization(df)
     return df
 
 
@@ -264,7 +264,6 @@ def evaluate_score(train_set, features, validation_set, header):
     training_set = train_set.copy()
     for signature in training_set:
         training_set[i] = pd.DataFrame(data=signature, columns=features)
-        print(training_set[i])
         i += 1
 
     # train_df = np.concatenate(training_set)
@@ -277,12 +276,12 @@ def evaluate_score(train_set, features, validation_set, header):
     false_acceptance = 0
     false_rejection = 0
 
-    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X = np.array(training_set))
+    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X=np.array(training_set))
 
     for signature in training_set:
         a = pd.DataFrame(data=signature, columns=header)
         a = a[features]
-        score_train[count_training] = model.log_probability(np.array(a))
+        score_train[count_training] = model.log_probability(np.array(a))/len(signature)
         count_training += 1
 
     average_score = np.mean(score_train)
@@ -296,7 +295,7 @@ def evaluate_score(train_set, features, validation_set, header):
         for signature in validation_set["true"]:
             a = pd.DataFrame(data=signature, columns=header)
             a = a[features]
-            distance = np.abs(model.log_probability(np.array(a)) - average_score)
+            distance = np.abs(model.log_probability(a)/len(signature) - average_score)
             score_test = np.exp(distance * (-1) / len(features))
             count_validation += 1
 
@@ -306,7 +305,7 @@ def evaluate_score(train_set, features, validation_set, header):
         for signature in validation_set["false"]:
             a = pd.DataFrame(data=signature, columns=header)
             a = a[features]
-            distance = np.abs(model.log_probability(np.array(a)) - average_score)
+            distance = np.abs(model.log_probability(a)/len(signature) - average_score)
             score_test = np.exp(distance * (-1) / len(features))
             count_validation += 1
 
@@ -372,7 +371,7 @@ def test_evaluation(training_set, features, validation_set):
     #else:
     #    min_score = (limit_min + min_score * 3) / 4
 
-    distance = np.abs(min_score - average_score)
+    distance = np.abs(limit_min - average_score)
     threshold = np.exp(distance * (-1) / len(features))
 
     print(f"prob threshold: {threshold}")
@@ -428,159 +427,157 @@ def test_evaluation(training_set, features, validation_set):
     return [equal_error_rate, false_acceptance_rate, false_rejection_rate]
 
 
-score_exp1, far1, frr1 = [None] * 29, [None] * 29, [None] * 29
-score_exp2, far2, frr2 = [None] * 29, [None] * 29, [None] * 29
-score_exp3, far3, frr3 = [None] * 29, [None] * 29, [None] * 29
-score_exp4, far4, frr4 = [None] * 29, [None] * 29, [None] * 29
-score_exp5, far5, frr5 = [None] * 29, [None] * 29, [None] * 29
-score_exp6, far6, frr6 = [None] * 29, [None] * 29, [None] * 29
-score_exp_g, far_g, frr_g = [None] * 29, [None] * 29, [None] * 29
-score_exp_h, far_h, frr_h = [None] * 29, [None] * 29, [None] * 29
-score_exp_i, far_i, frr_i = [None] * 29, [None] * 29, [None] * 29
-score_exp_j, far_j, frr_j = [None] * 29, [None] * 29, [None] * 29
-score_exp_k, far_k, frr_k = [None] * 29, [None] * 29, [None] * 29
-score_exp_l, far_l, frr_l = [None] * 29, [None] * 29, [None] * 29
-score_exp_m, far_m, frr_m = [None] * 29, [None] * 29, [None] * 29
-score_exp_n, far_n, frr_n = [None] * 29, [None] * 29, [None] * 29
-score_exp_o, far_o, frr_o = [None] * 29, [None] * 29, [None] * 29
+def testing():
+    score_exp1, far1, frr1 = [None] * 29, [None] * 29, [None] * 29
+    score_exp2, far2, frr2 = [None] * 29, [None] * 29, [None] * 29
+    score_exp3, far3, frr3 = [None] * 29, [None] * 29, [None] * 29
+    score_exp4, far4, frr4 = [None] * 29, [None] * 29, [None] * 29
+    score_exp5, far5, frr5 = [None] * 29, [None] * 29, [None] * 29
+    score_exp6, far6, frr6 = [None] * 29, [None] * 29, [None] * 29
+    score_exp_g, far_g, frr_g = [None] * 29, [None] * 29, [None] * 29
+    score_exp_h, far_h, frr_h = [None] * 29, [None] * 29, [None] * 29
+    score_exp_i, far_i, frr_i = [None] * 29, [None] * 29, [None] * 29
+    score_exp_j, far_j, frr_j = [None] * 29, [None] * 29, [None] * 29
+    score_exp_k, far_k, frr_k = [None] * 29, [None] * 29, [None] * 29
+    score_exp_l, far_l, frr_l = [None] * 29, [None] * 29, [None] * 29
+    score_exp_m, far_m, frr_m = [None] * 29, [None] * 29, [None] * 29
+    score_exp_n, far_n, frr_n = [None] * 29, [None] * 29, [None] * 29
+    score_exp_o, far_o, frr_o = [None] * 29, [None] * 29, [None] * 29
 
-with open('features-copy.csv', mode='r') as feature_file:
-    feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-    i = 0
-    for (fs) in feature_reader:
-        if i > 0:
+    with open('features-copy.csv', mode='r') as feature_file:
+        feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        i = 0
+        for (fs) in feature_reader:
+            if i > 0:
 
-            print(f"user n#{i}")
-            print(fs)
-            fs.pop()
+                print(f"user n#{i}")
+                print(fs)
+                fs.pop()
 
-            training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
+                training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
 
-            training = training_list[0:4]
-            score_exp1[i - 1], far1[i-1], frr1[i-1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[0:4]
+                score_exp1[i - 1], far1[i-1], frr1[i-1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[4:8]
-            score_exp2[i - 1], far2[i-1], frr2[i-1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[4:8]
+                score_exp2[i - 1], far2[i-1], frr2[i-1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[8:12]
-            score_exp3[i - 1], far3[i-1], frr3[i-1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[8:12]
+                score_exp3[i - 1], far3[i-1], frr3[i-1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[12:16]
-            score_exp4[i - 1], far4[i-1], frr4[i-1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[12:16]
+                score_exp4[i - 1], far4[i-1], frr4[i-1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[21:25]
-            score_exp5[i - 1], far5[i-1], frr5[i-1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[21:25]
+                score_exp5[i - 1], far5[i-1], frr5[i-1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[36:40]
-            score_exp6[i - 1], far6[i-1], frr6[i-1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[36:40]
+                score_exp6[i - 1], far6[i-1], frr6[i-1] = test_evaluation(training, fs, testing_dict)
 
-            score_exp_g[i - 1], far_g[i - 1], frr_g[i - 1] = score_exp1[i - 1], far1[i-1], frr1[i-1]
+                score_exp_g[i - 1], far_g[i - 1], frr_g[i - 1] = score_exp1[i - 1], far1[i-1], frr1[i-1]
 
-            training = training_list[0:16]
-            score_exp_h[i - 1], far_h[i - 1], frr_h[i - 1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[0:16]
+                score_exp_h[i - 1], far_h[i - 1], frr_h[i - 1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[0:31]
-            score_exp_i[i - 1], far_i[i - 1], frr_i[i - 1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[0:31]
+                score_exp_i[i - 1], far_i[i - 1], frr_i[i - 1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[1:16] + training_list[21:25]
-            score_exp_j[i - 1], far_j[i - 1], frr_j[i - 1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[1:16] + training_list[21:25]
+                score_exp_j[i - 1], far_j[i - 1], frr_j[i - 1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[4:16] + training_list[21:25]
-            score_exp_k[i - 1], far_k[i - 1], frr_k[i - 1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[4:16] + training_list[21:25]
+                score_exp_k[i - 1], far_k[i - 1], frr_k[i - 1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[8:16] + training_list[21:25]
-            score_exp_l[i - 1], far_l[i - 1], frr_l[i - 1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[8:16] + training_list[21:25]
+                score_exp_l[i - 1], far_l[i - 1], frr_l[i - 1] = test_evaluation(training, fs, testing_dict)
 
-            training = training_list[12:16] + training_list[21:25]
-            score_exp_m[i - 1], far_m[i - 1], frr_m[i - 1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[12:16] + training_list[21:25]
+                score_exp_m[i - 1], far_m[i - 1], frr_m[i - 1] = test_evaluation(training, fs, testing_dict)
 
-            score_exp_n[i - 1], far_n[i - 1], frr_n[i - 1] = score_exp5[i - 1], far5[i - 1], frr5[i - 1]
+                score_exp_n[i - 1], far_n[i - 1], frr_n[i - 1] = score_exp5[i - 1], far5[i - 1], frr5[i - 1]
 
-            training = training_list[16:31]
-            score_exp_o[i - 1], far_o[i - 1], frr_o[i - 1] = test_evaluation(training, fs, testing_dict)
+                training = training_list[16:31]
+                score_exp_o[i - 1], far_o[i - 1], frr_o[i - 1] = test_evaluation(training, fs, testing_dict)
 
-        i += 1
+            i += 1
 
-    print(f"1)scores: {score_exp1}")
-    print(f"2)scores: {score_exp2}")
-    print(f"3)scores: {score_exp3}")
-    print(f"4)scores: {score_exp4}")
-    print(f"5)scores: {score_exp5}")
-    print(f"6)scores: {score_exp6}")
-    print(f"g)scores: {score_exp_g}")
-    print(f"h)scores: {score_exp_h}")
-    print(f"i)scores: {score_exp_i}")
-    print(f"j)scores: {score_exp_j}")
-    print(f"k)scores: {score_exp_k}")
-    print(f"l)scores: {score_exp_l}")
-    print(f"m)scores: {score_exp_m}")
-    print(f"n)scores: {score_exp_n}")
-    print(f"o)scores: {score_exp_o}")
+        print(f"1)scores: {score_exp1}")
+        print(f"2)scores: {score_exp2}")
+        print(f"3)scores: {score_exp3}")
+        print(f"4)scores: {score_exp4}")
+        print(f"5)scores: {score_exp5}")
+        print(f"6)scores: {score_exp6}")
+        print(f"g)scores: {score_exp_g}")
+        print(f"h)scores: {score_exp_h}")
+        print(f"i)scores: {score_exp_i}")
+        print(f"j)scores: {score_exp_j}")
+        print(f"k)scores: {score_exp_k}")
+        print(f"l)scores: {score_exp_l}")
+        print(f"m)scores: {score_exp_m}")
+        print(f"n)scores: {score_exp_n}")
+        print(f"o)scores: {score_exp_o}")
 
-    far1 = np.average(far1)
-    far2 = np.average(far2)
-    far3 = np.average(far3)
-    far4 = np.average(far4)
-    far5 = np.average(far5)
-    far6 = np.average(far6)
-    far_g = np.average(far_g)
-    far_h = np.average(far_h)
-    far_i = np.average(far_i)
-    far_j = np.average(far_j)
-    far_k = np.average(far_k)
-    far_l = np.average(far_l)
-    far_m = np.average(far_m)
-    far_n = np.average(far_n)
-    far_o = np.average(far_o)
-    print("average false acceptance for experiment:")
-    print(far1, far2, far3, far4, far5, far6, far_g, far_h, far_i, far_j, far_k, far_l, far_m, far_n, far_o)
+        far1 = np.average(far1)
+        far2 = np.average(far2)
+        far3 = np.average(far3)
+        far4 = np.average(far4)
+        far5 = np.average(far5)
+        far6 = np.average(far6)
+        far_g = np.average(far_g)
+        far_h = np.average(far_h)
+        far_i = np.average(far_i)
+        far_j = np.average(far_j)
+        far_k = np.average(far_k)
+        far_l = np.average(far_l)
+        far_m = np.average(far_m)
+        far_n = np.average(far_n)
+        far_o = np.average(far_o)
+        print("average false acceptance for experiment:")
+        print(far1, far2, far3, far4, far5, far6, far_g, far_h, far_i, far_j, far_k, far_l, far_m, far_n, far_o)
 
-    frr1 = np.average(frr1)
-    frr2 = np.average(frr2)
-    frr3 = np.average(frr3)
-    frr4 = np.average(frr4)
-    frr5 = np.average(frr5)
-    frr6 = np.average(frr6)
-    frr_g = np.average(frr_g)
-    frr_h = np.average(frr_h)
-    frr_i = np.average(frr_i)
-    frr_j = np.average(frr_j)
-    frr_k = np.average(frr_k)
-    frr_l = np.average(frr_l)
-    frr_m = np.average(frr_m)
-    frr_n = np.average(frr_n)
-    frr_o = np.average(frr_o)
-    print("average false rejection for experiment:")
-    print(frr1, frr2, frr3, frr4, frr5, frr6, frr_g, frr_h, frr_i, frr_j, frr_k, frr_l, frr_m, frr_n, frr_o)
+        frr1 = np.average(frr1)
+        frr2 = np.average(frr2)
+        frr3 = np.average(frr3)
+        frr4 = np.average(frr4)
+        frr5 = np.average(frr5)
+        frr6 = np.average(frr6)
+        frr_g = np.average(frr_g)
+        frr_h = np.average(frr_h)
+        frr_i = np.average(frr_i)
+        frr_j = np.average(frr_j)
+        frr_k = np.average(frr_k)
+        frr_l = np.average(frr_l)
+        frr_m = np.average(frr_m)
+        frr_n = np.average(frr_n)
+        frr_o = np.average(frr_o)
+        print("average false rejection for experiment:")
+        print(frr1, frr2, frr3, frr4, frr5, frr6, frr_g, frr_h, frr_i, frr_j, frr_k, frr_l, frr_m, frr_n, frr_o)
 
-    eer1 = np.average(score_exp1)
-    eer2 = np.average(score_exp2)
-    eer3 = np.average(score_exp3)
-    eer4 = np.average(score_exp4)
-    eer5 = np.average(score_exp5)
-    eer6 = np.average(score_exp6)
-    eer_g = np.average(score_exp_g)
-    eer_h = np.average(score_exp_h)
-    eer_i = np.average(score_exp_i)
-    eer_j = np.average(score_exp_j)
-    eer_k = np.average(score_exp_k)
-    eer_l = np.average(score_exp_l)
-    eer_m = np.average(score_exp_m)
-    eer_n = np.average(score_exp_n)
-    eer_o = np.average(score_exp_o)
-    print("average equal error rate for experiment:")
-    print(eer1, eer2, eer3, eer4, eer5, eer6, eer_g, eer_h, eer_i, eer_j, eer_k, eer_l, eer_m, eer_n, eer_o)
+        eer1 = np.average(score_exp1)
+        eer2 = np.average(score_exp2)
+        eer3 = np.average(score_exp3)
+        eer4 = np.average(score_exp4)
+        eer5 = np.average(score_exp5)
+        eer6 = np.average(score_exp6)
+        eer_g = np.average(score_exp_g)
+        eer_h = np.average(score_exp_h)
+        eer_i = np.average(score_exp_i)
+        eer_j = np.average(score_exp_j)
+        eer_k = np.average(score_exp_k)
+        eer_l = np.average(score_exp_l)
+        eer_m = np.average(score_exp_m)
+        eer_n = np.average(score_exp_n)
+        eer_o = np.average(score_exp_o)
+        print("average equal error rate for experiment:")
+        print(eer1, eer2, eer3, eer4, eer5, eer6, eer_g, eer_h, eer_i, eer_j, eer_k, eer_l, eer_m, eer_n, eer_o)
 
-"""
 
 for i in range(1, 30):
 
     training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
     subset, eer = feature_selection(training_fs_list, validation_fs_dict)
-    with open('featuresNP.csv', mode='a') as feature_file:
+    with open('features_LN.csv', mode='a') as feature_file:
         feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         subset = list(subset)
         subset.append(eer)
         feature_writer.writerow(subset)
-        
-"""
