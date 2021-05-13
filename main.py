@@ -351,7 +351,7 @@ def test_evaluation(training_set, features, validation_set):
     for signature in training_set:
         score_train[count_training] = model.log_probability(signature)
         # print(signature)
-        print(f" prob signature {count_training}: {score_train[count_training]}")
+        # print(f" prob signature {count_training}: {score_train[count_training]}")
         count_training += 1
 
     average_score = np.average(score_train)
@@ -382,7 +382,7 @@ def test_evaluation(training_set, features, validation_set):
         score_test_gen[count_validation] = model.log_probability(a)
         distance = np.abs(score_test_gen[count_validation] - average_score)
         score_test = np.exp(distance * (-1) / len(features))
-        print(f" prob signature genuine {count_validation+1}: {score_test_gen[count_validation]}")
+        print(f" prob signature genuine {count_validation+1}: {score_test]}")
         count_validation += 1
         # print(f"distance score on genuine: {score_test}, {threshold}")
 
@@ -397,7 +397,7 @@ def test_evaluation(training_set, features, validation_set):
         score_test_skilled[count_validation] = model.log_probability(a)
         distance = np.abs(score_test_skilled[count_validation] - average_score)
         score_test = np.exp(distance * (-1) / len(features))
-        print(f" prob signature skilled {count_validation+1}: {score_test_skilled[count_validation]}")
+        print(f" prob signature skilled {count_validation+1}: {score_test}")
         count_validation += 1
         # print(f"distance score on skilled: {score_test}, {threshold}")
         if score_test > threshold:
