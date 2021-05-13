@@ -361,10 +361,11 @@ def test_evaluation(training_set, features, validation_set):
     # min_score = np.min(score_train) * 0.95
     # min_score = min_score - (3 * std_dev / len(score_train))
 
-    limit_min = mu - 3 * std_dev
+    limit_min = mu - 3 * std_dev # 3 sigma rule
     min_score = np.min(score_train)
-    print(f"limit min: {limit_min} min score{min_score}")
-    min_score = (limit_min + min_score) / 2
+
+    print(f"3 sigma limit min: {limit_min}; min score{min_score}")
+    # min_score = (limit_min + min_score) / 2
 
     #if len(score_train) == 4:
     #    min_score = (limit_min * 3 + min_score) / 4
@@ -382,7 +383,7 @@ def test_evaluation(training_set, features, validation_set):
         score_test_gen[count_validation] = model.log_probability(a)
         distance = np.abs(score_test_gen[count_validation] - average_score)
         score_test = np.exp(distance * (-1) / len(features))
-        print(f" prob signature genuine {count_validation+1}: {score_test]}")
+        print(f" prob signature genuine {count_validation+1}: {score_test}")
         count_validation += 1
         # print(f"distance score on genuine: {score_test}, {threshold}")
 
@@ -549,6 +550,7 @@ with open('features-copy.csv', mode='r') as feature_file:
     frr_m = np.average(frr_m)
     frr_n = np.average(frr_n)
     frr_o = np.average(frr_o)
+    print("average false rejection for experiment:")
     print(frr1, frr2, frr3, frr4, frr5, frr6, frr_g, frr_h, frr_i, frr_j, frr_k, frr_l, frr_m, frr_n, frr_o)
 
     eer1 = np.average(score_exp1)
