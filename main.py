@@ -1,3 +1,5 @@
+import tkinter.tix
+
 import numpy as np
 import math
 import csv
@@ -29,11 +31,9 @@ def z_normalization(df):
     df_max = column_maxes.max()
     return df / df_max
 
-def scale(A):
+def norm(A):
     norm = (A-np.min(A))/(np.max(A) - np.min(A))
-    scal = 0 + 1 * norm
-    scal = 1 - scal
-    return scal
+    return norm
 
 # time derivative approsimation
 def second_order_regression(data_list):
@@ -279,44 +279,40 @@ def evaluate_score(training_set, features, validation_set):
     count_validation = 0
 
     model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X=train_set, random_state=42)
+    try:
+        for signature in train_set:
+            a = signature[features]
+            score_train[count_training] = model.log_probability(a)
+            count_training += 1
 
-    for signature in train_set:
-        a = signature[features]
-        score_train[count_training] = np.exp(model.log_probability(a) / len(signature))
-        count_training += 1
+        average_score = np.average(score_train)
+        count_training = 0
 
-    if "nan" in score_train:
-        equal_error_rate = 1
-        print("Fit Training Error")
-    else:
+        for signature in train_set:
+            a = signature[features]
+            distance = np.abs(model.log_probability(a) - average_score)
+            score_train[count_training] = np.exp(distance/len(features))
+            count_training += 1
+
         for signature in validation_set["true"]:
             a = signature[features]
-            score_test_gen[count_validation] = np.exp(model.log_probability(a) / len(signature))
+            distance = np.abs(model.log_probability(a) - average_score)
+            score_test_gen[count_validation] = np.exp((distance * -1) / len(features))
             count_validation += 1
 
         count_validation = 0
 
         for signature in validation_set["false"]:
             a = signature[features]
-            score_test_skilled[count_validation] = np.exp(model.log_probability(a) / len(signature))
+            distance = np.abs(model.log_probability(a) - average_score)
+            score_test_skilled[count_validation] = np.exp((distance * -1) / len(features))
             count_validation += 1
 
-        probabilities = np.concatenate([score_train, score_test_gen, score_test_skilled])
-        probabilities = scale(probabilities)
-
-        score_train = probabilities[0:len(score_train)]
-        i = 0
-        for score in score_train:
-            i += 1
-            print(f" prob signature training {i}: {score}")
-
-        score_test_gen = probabilities[len(score_train):len(score_train) + 10]
         i = 0
         for score in score_test_gen:
             i += 1
             print(f" prob signature testing genuine {i}: {score}")
 
-        score_test_skilled = probabilities[len(score_train) + 10:len(score_train) + 30]
         i = 0
         for score in score_test_skilled:
             i += 1
@@ -327,7 +323,10 @@ def evaluate_score(training_set, features, validation_set):
         fpr, tpr, thresh = roc_curve(labels, probs)
         equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
         threshold = interp1d(fpr, thresh)(equal_error_rate)
-        print(f"threshold: {threshold}")
+        print(f"threshold: {threshold} eer: {equal_error_rate}")
+    except:
+        equal_error_rate = 1
+        print("Fit Training Error")
 
     print(f"equal error rate: {equal_error_rate}")
 
@@ -342,60 +341,64 @@ def test_evaluation(training_set, features, validation_set):
         training_set[i] = signature[features]
         i += 1
 
+    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X=np.array(training_set), random_state=42)
+
     score_train = [None] * (len(training_set))
     score_test_gen = [None] * (len(validation_set["genuine"]))
     score_test_skilled = [None] * (len(validation_set["skilled"]))
     count_training = 0
     count_validation = 0
 
-    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X=training_set, random_state=42)
+    try:
+        for signature in training_set:
+            score_train[count_training] = model.log_probability(signature)
+            count_training += 1
 
-    for signature in training_set:
-        a = signature[features]
-        score_train[count_training] = np.exp(model.log_probability(a)/len(signature))
-        count_training += 1
+        average_score = np.average(score_train)
+        count_training = 0
 
-    for signature in validation_set["genuine"]:
-        a = signature[features]
-        score_test_gen[count_validation] = np.exp(model.log_probability(a)/len(signature))
-        count_validation += 1
+        for signature in training_set:
+            a = signature[features]
+            distance = np.abs(model.log_probability(a) - average_score)
+            score_train[count_training] = np.exp(distance/len(features))
+            count_training += 1
 
-    count_validation = 0
+        for signature in validation_set["genuine"]:
+            a = signature[features]
+            distance = np.abs(model.log_probability(a) - average_score)
+            score_test_gen[count_validation] = np.exp((distance * -1) / len(features))
+            count_validation += 1
 
-    for signature in validation_set["skilled"]:
-        a = signature[features]
-        score_test_skilled[count_validation] = np.exp(model.log_probability(a)/len(signature))
-        count_validation += 1
+        count_validation = 0
 
-    probabilities = np.concatenate([score_train, score_test_gen, score_test_skilled])
-    probabilities = scale(probabilities)
+        for signature in validation_set["skilled"]:
+            a = signature[features]
+            distance = np.abs(model.log_probability(a) - average_score)
+            score_test_skilled[count_validation] = np.exp((distance * -1) / len(features))
+            count_validation += 1
 
-    score_train = probabilities[0:len(score_train)]
-    i = 0
-    for score in score_train:
-        i += 1
-        print(f" prob signature training {i}: {score}")
+        i = 0
+        for score in score_test_gen:
+            i += 1
+            print(f" prob signature testing genuine {i}: {score}")
 
-    score_test_gen = probabilities[len(score_train):len(score_train)+5]
-    i = 0
-    for score in score_test_gen:
-        i += 1
-        print(f" prob signature testing genuine {i}: {score}")
+        i = 0
+        for score in score_test_skilled:
+            i += 1
+            print(f" prob signature testing skilled {i}: {score}")
 
-    score_test_skilled = probabilities[len(score_train)+5:len(score_train)+15]
-    i = 0
-    for score in score_test_skilled:
-        i += 1
-        print(f" prob signature testing skilled {i}: {score}")
+        labels = [1] * 5 + [0] * 10
+        probs = np.concatenate([score_test_gen, score_test_skilled])
+        fpr, tpr, thresh = roc_curve(labels, probs)
+        equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+        threshold = interp1d(fpr, thresh)(equal_error_rate)
+        print(f"threshold: {threshold} eer: {equal_error_rate}")
 
-    labels = [1] * 5 + [0] * 10
-    probs = np.concatenate([score_test_gen, score_test_skilled])
-    fpr, tpr, thresh = roc_curve(labels, probs)
-    equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
-    threshold = interp1d(fpr, thresh)(equal_error_rate)
-    print(f"threshold: {threshold} eer: {equal_error_rate}")
+    except:
+        equal_error_rate = 0.5
+        print(f"ERROR Nan values eer: {equal_error_rate}")
 
-    return [equal_error_rate]
+    return equal_error_rate
 
 
 def testing():
@@ -416,7 +419,7 @@ def testing():
     score_exp_n = [None] * 29
     score_exp_o = [None] * 29
 
-    with open('features-copy.csv', mode='r') as feature_file:
+    with open('features_roc.csv', mode='r') as feature_file:
         feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         i = 0
         for (fs) in feature_reader:
@@ -493,16 +496,16 @@ def testing():
         print(eer1, eer2, eer3, eer4, eer5, eer6, eer_g, eer_h, eer_i, eer_j, eer_k, eer_l, eer_m, eer_n, eer_o)
 
 
-for i in range(1, 30):
+def start_fs():
+    for i in range(1, 30):
 
-    training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
-    subset, eer = feature_selection(training_fs_list, validation_fs_dict)
-    with open('features_roc.csv', mode='a') as feature_file:
-        feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
-        subset = list(subset)
-        subset.append(eer)
-        feature_writer.writerow(subset)
+        training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
+        subset, eer = feature_selection(training_fs_list, validation_fs_dict)
+        with open('features_roc2.csv', mode='a') as feature_file:
+            feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+            subset = list(subset)
+            subset.append(eer)
+            feature_writer.writerow(subset)
 
-"""
-testing()
-"""
+
+start_fs()
