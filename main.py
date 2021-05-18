@@ -341,15 +341,19 @@ def test_evaluation(training_set, features, validation_set):
         training_set[i] = signature[features]
         i += 1
 
-    model = HiddenMarkovModel.from_samples(NormalDistribution, n_components=2, X=np.array(training_set), random_state=42)
-
-    score_train = [None] * (len(training_set))
-    score_test_gen = [None] * (len(validation_set["genuine"]))
-    score_test_skilled = [None] * (len(validation_set["skilled"]))
-    count_training = 0
-    count_validation = 0
-
     try:
+        model = HiddenMarkovModel.from_samples(NormalDistribution,
+                                               n_components=2,
+                                               X=np.array(training_set),
+                                               random_state=42,
+                                               algorithm="viterbi",
+                                               n_init=20)
+
+        score_train = [None] * (len(training_set))
+        score_test_gen = [None] * (len(validation_set["genuine"]))
+        score_test_skilled = [None] * (len(validation_set["skilled"]))
+
+        count_training = 0
         for signature in training_set:
             score_train[count_training] = model.log_probability(signature)
             count_training += 1
@@ -362,6 +366,8 @@ def test_evaluation(training_set, features, validation_set):
             distance = np.abs(model.log_probability(a) - average_score)
             score_train[count_training] = np.exp(distance/len(features))
             count_training += 1
+
+        count_validation = 0
 
         for signature in validation_set["genuine"]:
             a = signature[features]
@@ -419,7 +425,7 @@ def testing():
     score_exp_n = [None] * 29
     score_exp_o = [None] * 29
 
-    with open('features_roc.csv', mode='r') as feature_file:
+    with open('features.csv', mode='r') as feature_file:
         feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         i = 0
         for (fs) in feature_reader:
@@ -501,11 +507,11 @@ def start_fs():
 
         training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
         subset, eer = feature_selection(training_fs_list, validation_fs_dict)
-        with open('features_roc2.csv', mode='a') as feature_file:
+        with open('featuresNP.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
             feature_writer.writerow(subset)
 
 
-start_fs()
+testing()
