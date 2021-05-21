@@ -6,7 +6,7 @@ import csv
 import os
 import pandas as pd
 from dtw import *
-import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
 import warnings
 import random
 from pomegranate import *
@@ -51,11 +51,10 @@ def second_order_regression(data_list):
 
 
 def load_dataset(user):
-    training_list = list()  # dictionary of all training dataframes [1..40]
+
+    training_list = list()  # list of all training dataframes [1..40]
     testing_dict = {'skilled': [], 'genuine': []}  # dictionary of all testing dataframes [41..56]
-    training_fs_list = list()  # list of training dataframes (feature selection) [alltrain - validation]
-    validation_fs_dict = {'true': [],
-                          'false': []}  # dictionary of validation dataframes (feature selection) [one true for each session, 18 false random]
+
     random.seed(42)  # pseudorandomic
     path = './xLongSignDB/'
     path_user = path + str(user) + '/'
@@ -77,27 +76,12 @@ def load_dataset(user):
                 testing_dict['genuine'].append(df)
             else:
                 training_list.append(df)
-                if i % 4 == 0:
-                    validation_fs_dict['true'].append(df)
-                else:
-                    training_fs_list.append(df)
-
         else:
             print(file)
 
-    for i in range(0, 20):
-        numbers = [x for x in range(1, 30)]
-        numbers.remove(user)
-        y = random.choice(numbers)
-        path_user = path + str(y) + '/'
-        files = os.listdir(path_user)
-        z = random.randint(10, 40)
-        df = pd.read_csv(path_user + files[z], header=0, sep=' ',
-                         names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
-        df = initialize_dataset(df)
-        validation_fs_dict['false'].append(df)
+    x_train_fs, x_validation_fs = train_test_split(training_list, test_size = 0.2, random_state = 42)
 
-    return training_list, testing_dict, training_fs_list, validation_fs_dict
+    return training_list, testing_dict, x_train_fs, x_validation_fs
 
 
 def initialize_dataset(df):
@@ -108,7 +92,7 @@ def initialize_dataset(df):
     new_df = pd.DataFrame(data=None)
     for column in df.columns.values:
         new_df[column] = normalization(df[column].values)
-    df = normalization(df)
+    #df = normalization(df)
     return new_df
 
 
@@ -215,69 +199,7 @@ def compute_features(df):
 
     return df
 
-
 def feature_selection(training_set, validation_set):
-    k = 0  # counter number of feature to select
-    subset = set()  # empty set ("null set") so that the k = 0 (where k is the size of the subset)
-    header = list(training_set[0].columns.values)
-    total_features = set(header)
-    last_score = [1] * 10
-    while k != 9:
-
-        best_score = 1
-        best_feature = ""
-        feature_set = subset.copy()
-
-        for f in (total_features - subset):
-            feature_set.add(f)
-            score = evaluate_score(training_set, list(feature_set), validation_set)
-            feature_set.remove(f)
-            if score < best_score:
-                best_score = score
-                best_feature = f
-
-        subset.add(best_feature)
-        k += 1
-
-        last_score[k] = best_score
-
-        print("best " + str(best_feature))
-
-        still_remove = True
-
-        while still_remove:
-
-            if len(subset) > 1:
-
-                feature_set = subset.copy()
-
-                worst_feature = ""
-                removed_score = 1
-
-                for f in subset:
-                    feature_set.remove(f)
-                    score = evaluate_score(training_set, list(feature_set), validation_set)
-                    feature_set.add(f)
-                    if score <= removed_score:
-                        removed_score = score
-                        worst_feature = f
-
-                if removed_score < last_score[k-1]:  # if you get better than before adding, keep removing features
-                    last_score[k-1] = removed_score
-                    subset.remove(worst_feature)
-                    k -= 1
-                    print("removed" + str(worst_feature))
-                    still_remove = True
-                else:                           # otherwhise removed score is worse than before, go adding features
-                    still_remove = False
-            else:
-                k = 1
-                still_remove = False
-
-    return subset, best_score
-
-
-def feature_selection_accuracy(training_set, validation_set):
     k = 0  # counter number of feature to select
     subset = set()  # empty set ("null set") so that the k = 0 (where k is the size of the subset)
     header = list(training_set[0].columns.values)
@@ -291,7 +213,7 @@ def feature_selection_accuracy(training_set, validation_set):
 
         for f in (total_features - subset):
             feature_set.add(f)
-            score = evaluate_accuracy(training_set, list(feature_set), validation_set)
+            score = evaluate_score(training_set,validation_set, list(feature_set), )
             feature_set.remove(f)
             if score > best_score:
                 best_score = score
@@ -299,13 +221,11 @@ def feature_selection_accuracy(training_set, validation_set):
 
         subset.add(best_feature)
         k += 1
-
         last_score[k] = best_score
 
         print("best " + str(best_feature))
 
         still_remove = True
-
         while still_remove:
 
             if len(subset) > 1:
@@ -314,10 +234,9 @@ def feature_selection_accuracy(training_set, validation_set):
 
                 worst_feature = ""
                 removed_score = 0
-
                 for f in subset:
                     feature_set.remove(f)
-                    score = evaluate_accuracy(training_set, list(feature_set), validation_set)
+                    score = evaluate_score(training_set, validation_set,list(feature_set))
                     feature_set.add(f)
                     if score > removed_score:
                         removed_score = score
@@ -338,120 +257,60 @@ def feature_selection_accuracy(training_set, validation_set):
     return subset, best_score
 
 
-def evaluate_accuracy(training_set, features, validation_set):
-
-    print(features)
-    train_set = training_set.copy()
-    i = 0
-
-    for signature in train_set:
-        train_set[i] = signature[features]
-        i += 1
-
-    labels = [1] * len(validation_set)
-    accuracies = [None] * (len(validation_set))
-    count_validation = 0
-
-    model = HiddenMarkovModel.from_samples(NormalDistribution,
-                                           n_components=2,
-                                           X=np.array(train_set),
-                                           random_state=42,
-                                           n_init=4,
-                                           inertia=1.0)
-
-    #print(len(np.ndarray([df.std() for df in validation_set])))
-    #accuracy = model.score(np.ndarray([df.std() for df in validation_set]), np.ndarray(labels))
-
-    #for signature in validation_set:
-    #    a = signature[features]
-    #    accuracies[count_validation] = model.score(np.array([a]), np.array([1]))
-    #    print(accuracies[count_validation])
-    #    count_validation += 1
-
-    # accuracy = np.mean(accuracies)
-    print(f"accuracy: {accuracy}")
-
-
-    return accuracy
-
-
-def evaluate_score(training_set, features, validation_set):
+def evaluate_score(training_set,validation_set,features):
 
     print(features)
 
     train_set = training_set.copy()
 
     i = 0
-
+    avg_accuracy = 0
     for signature in train_set:
         train_set[i] = signature[features]
         i += 1
+
+    label_train = pd.DataFrame(data=[1] * len(train_set), columns=['Y'])
+    label_validation = pd.DataFrame(data=[1] * len(validation_set), columns=['Y'])
 
     try:
         score_train = [None] * (len(train_set))
-        score_test_gen = [None] * (len(validation_set["true"]))
-        score_test_skilled = [None] * (len(validation_set["false"]))
+        score_validation = [None] * (len(validation_set))
         count_training = 0
         count_validation = 0
 
         model = HiddenMarkovModel.from_samples(NormalDistribution,
                                                n_components=2,
                                                X=np.array(train_set),
-                                               random_state=42,
-                                               n_init=4,
-                                               inertia=1.0)
+                                               random_state=42)
 
         for signature in train_set:
-            score_train[count_training] = model.log_probability(signature)
+            score_train[count_training] = model.score(np.array(signature),np.array(label_train))
             count_training += 1
 
-        average_score = np.average(score_train)
-        count_training = 0
-
-        for signature in train_set:
+        for signature in validation_set:
             a = signature[features]
-            distance = np.abs(model.log_probability(a) - average_score)
-            score_train[count_training] = np.exp(distance/len(features))
-            count_training += 1
-
-        for signature in validation_set["true"]:
-            a = signature[features]
-            distance = np.abs(model.log_probability(a) - average_score)
-            score_test_gen[count_validation] = np.exp((distance * -1) / len(features))
-            count_validation += 1
-
-        count_validation = 0
-
-        for signature in validation_set["false"]:
-            a = signature[features]
-            distance = np.abs(model.log_probability(a) - average_score)
-            score_test_skilled[count_validation] = np.exp((distance * -1) / len(features))
+            score_validation[count_validation] = model.score(np.array(a),np.array(label_validation))
             count_validation += 1
 
         i = 0
-        for score in score_test_gen:
+        for score in score_train:
             i += 1
-            # print(f" prob signature testing genuine {i}: {score}")
+            #print(f"accuracy on training for signature n. {i}: {score}")
 
         i = 0
-        for score in score_test_skilled:
+        for score in score_validation:
             i += 1
-            # print(f" prob signature testing skilled {i}: {score}")
+            #print(f"accuracy on testing for signature n. {i}: {score}")
 
-        labels = [1] * 10 + [0] * 20
-        probs = np.concatenate([score_test_gen, score_test_skilled])
-        fpr, tpr, thresh = roc_curve(labels, probs)
-        equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
-        threshold = interp1d(fpr, thresh)(equal_error_rate)
-        # print(f"threshold: {threshold} eer: {equal_error_rate}")
+        avg_accuracy_train = np.mean(score_train)
+        avg_accuracy = np.mean(score_validation)
+        print(f"average accuracy on training: {avg_accuracy_train}")
+        print(f"average accuracy on testing:  {avg_accuracy}")
 
     except:
-        equal_error_rate = 1
-        print("Fit Training Error")
+        print("Fit error")
 
-    print(f"equal error rate: {equal_error_rate}")
-
-    return equal_error_rate
+    return avg_accuracy
 
 
 def test_evaluation(training_set, features, validation_set):
@@ -463,10 +322,6 @@ def test_evaluation(training_set, features, validation_set):
         i += 1
 
     try:
-
-        length = np.sum((len(signature) for signature in training_set))
-        # components = length // (4 * 30)
-        # print(components)
 
         model = HiddenMarkovModel.from_samples(NormalDistribution,
                                                n_components=2,
@@ -628,6 +483,7 @@ def testing():
         print(eer1, eer2, eer3, eer4, eer5, eer6, eer_g, eer_h, eer_i, eer_j, eer_k, eer_l, eer_m, eer_n, eer_o)
 
 
+
 def start_fs():
     for i in range(1, 30):
 
@@ -641,3 +497,9 @@ def start_fs():
             feature_writer.writerow(subset)
 
 start_fs()
+
+'''
+
+testing()
+
+'''
