@@ -3,7 +3,9 @@ import numpy as np
 import math
 import csv
 import pandas as pd
+from hmmlearn import hmm
 import matplotlib.pyplot as plt
+from hmmlearn.hmm import GMMHMM
 from sklearn.mixture import GaussianMixture
 import warnings
 import random
@@ -267,24 +269,18 @@ def feature_selection(training_set, validation_set):
     return subset, best_score
 
 
-def evaluate_score(train_set,valid_set, features):
+def evaluate_score(train_set, valid_set, features):
 
     print(features)
     training_set = train_set.copy()
     validation_set = valid_set.copy()
     x_list = [signature[features] for signature in training_set]
+    lengths_train = [len(signature) for signature in x_list]
     x_train = pd.concat(x_list)
-
-    if len(training_set) <= 15:
-        n_mix = 32
-    elif 15 < len(training_set) < 31:
-        n_mix = 128
-    else:
-        n_mix = 512
 
     try:
 
-        model = GaussianMixture(n_components=n_mix, random_state=42).fit(x_train)
+        model = GMMHMM(n_components=32, n_mix=2, random_state=42).fit(x_train, lengths_train)
         score_train = [None] * (len(train_set))
         score_test_gen = [None] * (len(validation_set["true"]))
         score_test_skilled = [None] * (len(validation_set["false"]))
@@ -292,7 +288,7 @@ def evaluate_score(train_set,valid_set, features):
         count_validation = 0
 
         for signature in x_list:
-            score_train[count_training] = model.score(signature)
+            score_train[count_training] = model.score(signature)/len(signature)
             count_training += 1
 
         average_score = np.average(score_train)
@@ -305,7 +301,7 @@ def evaluate_score(train_set,valid_set, features):
 
         for signature in validation_set["true"]:
             a = signature[features]
-            distance = np.abs(model.score(a) - average_score)
+            distance = np.abs(model.score(a)/len(signature) - average_score)
             score_test_gen[count_validation] = np.exp((distance * -1) / len(features))
             count_validation += 1
 
@@ -313,7 +309,7 @@ def evaluate_score(train_set,valid_set, features):
 
         for signature in validation_set["false"]:
             a = signature[features]
-            distance = np.abs(model.score(a) - average_score)
+            distance = np.abs(model.score(a)/len(signature) - average_score)
             score_test_skilled[count_validation] = np.exp((distance * -1) / len(features))
             count_validation += 1
 
@@ -327,13 +323,15 @@ def evaluate_score(train_set,valid_set, features):
             i += 1
             print(f" prob signature testing skilled {i}: {score}")
 
-        labels = [1] * len( validation_set["true"]) + [0] * len( validation_set["false"])
+        labels = [1] * len(validation_set["true"]) + [0] * len(validation_set["false"])
         probs = np.concatenate([score_test_gen, score_test_skilled])
         fpr, tpr, thresh = roc_curve(labels, probs)
         equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
         threshold = interp1d(fpr, thresh)(equal_error_rate)
         print(f"threshold: {threshold} eer: {equal_error_rate}")
+
     except:
+
         equal_error_rate = 1
         print("Fit Training Error")
 
@@ -342,16 +340,17 @@ def evaluate_score(train_set,valid_set, features):
     return equal_error_rate
 
 
-def test_evaluation(train_set, features, valid_set, n_mix):
+def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
 
     i = 0
     training_set = train_set.copy()
     validation_set = valid_set.copy()
     x_list = [signature[features] for signature in training_set]
+    lengths_train = [len(signature) for signature in x_list]
     x_train = pd.concat(x_list)
 
     try:
-        model = GaussianMixture(n_components=n_mix, random_state=42).fit(x_train)
+        model = GMMHMM(n_components=n_comp, n_mix=n_mix, random_state=42).fit(x_train, lengths_train)
         score_train = [None] * (len(training_set))
         score_test_gen = [None] * (len(validation_set["genuine"]))
         score_test_skilled = [None] * (len(validation_set["skilled"]))
@@ -359,7 +358,7 @@ def test_evaluation(train_set, features, valid_set, n_mix):
         count_training = 0
 
         for signature in x_list:
-            score_train[count_training] = model.score(signature)
+            score_train[count_training] = model.score(signature)/len(signature)
             count_training += 1
 
         average_score = np.average(score_train)
@@ -374,7 +373,7 @@ def test_evaluation(train_set, features, valid_set, n_mix):
 
         for signature in validation_set["genuine"]:
             a = signature[features]
-            distance = np.abs(model.score(a) - average_score)
+            distance = np.abs(model.score(a)/len(signature) - average_score)
             score_test_gen[count_validation] = np.exp((distance * -1) / len(features))
             count_validation += 1
 
@@ -382,7 +381,7 @@ def test_evaluation(train_set, features, valid_set, n_mix):
 
         for signature in validation_set["skilled"]:
             a = signature[features]
-            distance = np.abs(model.score(a) - average_score)
+            distance = np.abs(model.score(a)/len(signature) - average_score)
             score_test_skilled[count_validation] = np.exp((distance * -1) / len(features))
             count_validation += 1
 
@@ -417,7 +416,7 @@ def testing():
     for i in exp:
         results[i] = [None] * N_USERS
 
-    with open('features_GMM.csv', mode='r') as feature_file:
+    with open('features_HMM.csv', mode='r') as feature_file:
         feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         i = 0
         for (fs) in feature_reader:
@@ -429,51 +428,54 @@ def testing():
 
                 training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
 
-                n_mix = 32
+                n_mix = 16
+                n_comp = 2
                 training = training_list[0:4]
-                results['a'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['a'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[4:8]
-                results['b'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['b'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[8:12]
-                results['c'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['c'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[12:16]
-                results['d'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['d'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[21:26]
-                results['e'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['e'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[36:41]
-                results['f'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['f'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 results['g'][i - 1] = results['a'][i - 1]
 
-                n_mix = 128
+                n_mix = 2
+                n_comp = 32
                 training = training_list[0:16]
-                results['h'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['h'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[0:31]
-                results['i'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['i'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[0:16] + training_list[21:26]
-                results['j'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['j'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[4:16] + training_list[21:26]
-                results['k'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['k'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
-                n_mix = 32
+                n_mix = 16
+                n_comp = 2
                 training = training_list[8:16] + training_list[21:26]
-                results['l'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['l'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[12:16] + training_list[21:26]
-                results['m'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['m'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 results['n'][i - 1] = results['e'][i - 1]
 
                 training = training_list[16:31]
-                results['o'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['o'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
             i += 1
 
@@ -503,10 +505,10 @@ def start_fs():
 
         training_list, testing_dict, training_fs, validation_fs = load_dataset(i)
         subset, eer = feature_selection(training_fs, validation_fs)
-        with open('features_GMM.csv', mode='a') as feature_file:
+        with open('features_HMM.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
             feature_writer.writerow(subset)
 
-testing()
+start_fs()
