@@ -300,7 +300,7 @@ def evaluate_score(train_set,valid_set, features):
 
         for signature in x_list:
             distance = np.abs(score_train[count_training] - average_score)
-            score_train[count_training] = np.exp(distance / len(features))
+            score_train[count_training] = np.exp((distance * -1) / len(features))
             count_training += 1
 
         for signature in validation_set["true"]:
@@ -367,7 +367,7 @@ def test_evaluation(train_set, features, valid_set, n_mix):
 
         for signature in x_list:
             distance = np.abs(score_train[count_training] - average_score)
-            score_train[count_training] = np.exp(distance / len(features))
+            score_train[count_training] = np.exp((distance * -1) / len(features))
             count_training += 1
 
         count_validation = 0

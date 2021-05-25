@@ -3,10 +3,9 @@ import numpy as np
 import math
 import csv
 import pandas as pd
-from hmmlearn import hmm
 import matplotlib.pyplot as plt
-from hmmlearn.hmm import GMMHMM
-from sklearn.mixture import GaussianMixture
+import sklearn
+from hmmlearn import hmm
 import warnings
 import random
 from scipy.interpolate import interp1d
@@ -275,12 +274,11 @@ def evaluate_score(train_set, valid_set, features):
     training_set = train_set.copy()
     validation_set = valid_set.copy()
     x_list = [signature[features] for signature in training_set]
-    lengths_train = [len(signature) for signature in x_list]
     x_train = pd.concat(x_list)
 
     try:
 
-        model = GMMHMM(n_components=32, n_mix=2, random_state=42).fit(x_train, lengths_train)
+        model = hmm.GMMHMM(n_components=32, n_mix=2, random_state=42).fit(x_train)
         score_train = [None] * (len(train_set))
         score_test_gen = [None] * (len(validation_set["true"]))
         score_test_skilled = [None] * (len(validation_set["false"]))
@@ -296,7 +294,7 @@ def evaluate_score(train_set, valid_set, features):
 
         for signature in x_list:
             distance = np.abs(score_train[count_training] - average_score)
-            score_train[count_training] = np.exp(distance / len(features))
+            score_train[count_training] = np.exp((distance * -1) / len(features))
             count_training += 1
 
         for signature in validation_set["true"]:
@@ -350,7 +348,7 @@ def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
     x_train = pd.concat(x_list)
 
     try:
-        model = GMMHMM(n_components=n_comp, n_mix=n_mix, random_state=42).fit(x_train, lengths_train)
+        model = hmm.GMMHMM(n_components=n_comp, n_mix=n_mix, random_state=42).fit(x_train)
         score_train = [None] * (len(training_set))
         score_test_gen = [None] * (len(validation_set["genuine"]))
         score_test_skilled = [None] * (len(validation_set["skilled"]))
@@ -366,7 +364,7 @@ def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
 
         for signature in x_list:
             distance = np.abs(score_train[count_training] - average_score)
-            score_train[count_training] = np.exp(distance / len(features))
+            score_train[count_training] = np.exp((distance * -1) / len(features))
             count_training += 1
 
         count_validation = 0
@@ -505,7 +503,7 @@ def start_fs():
 
         training_list, testing_dict, training_fs, validation_fs = load_dataset(i)
         subset, eer = feature_selection(training_fs, validation_fs)
-        with open('features_HMM.csv', mode='a') as feature_file:
+        with open('features_HMM_NOLEN.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
