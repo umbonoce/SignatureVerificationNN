@@ -400,7 +400,7 @@ def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
         threshold = interp1d(fpr, thresh)(equal_error_rate)
         print(f"threshold: {threshold} eer: {equal_error_rate}")
     except:
-        equal_error_rate = 1
+        equal_error_rate = 1.0
         print("Raised exception")
 
     return equal_error_rate
@@ -444,7 +444,7 @@ def testing():
                 results['e'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 training = training_list[36:41]
-                results['f'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
+                results['f'][i - 1] = test_evaluation(training, fs, testing_dict, 1, 16)
 
                 results['g'][i - 1] = results['a'][i - 1]
 
@@ -486,12 +486,12 @@ def testing():
         print("average equal error rate for experiment:")
         print(eer)
 
-        plt.plot(exp[0:6], eer[0:6], color='green', label='Ageing Experiments (a-f)')
+        plt.plot(exp[0:6], eer[0:6], color='r', linestyle='dashed', marker='o', label='Ageing Experiments (a-f)')
         plt.ylabel('EER (%)')
         plt.xlabel('Experiments')
         plt.show()
 
-        plt.plot(exp[6:15], eer[6:15], color='green', label='Ageing Experiments (a-f)')
+        plt.plot(exp[6:15], eer[6:15], color='r', linestyle='dashed', marker='o', label='Ageing Experiments (f-o)')
         plt.ylabel('EER (%)')
         plt.xlabel('Experiments')
         plt.show()
@@ -503,10 +503,10 @@ def start_fs():
 
         training_list, testing_dict, training_fs, validation_fs = load_dataset(i)
         subset, eer = feature_selection(training_fs, validation_fs)
-        with open('features_HMM_NOLEN.csv', mode='a') as feature_file:
+        with open('features_HMM.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
             feature_writer.writerow(subset)
 
-start_fs()
+testing()
