@@ -431,49 +431,49 @@ def testing():
 
                 n_mix = 32
                 training = training_list[0:4]
-                results['a'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['a'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[4:8]
-                results['b'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['b'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[8:12]
-                results['c'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['c'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[12:16]
-                results['d'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['d'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[21:26]
-                results['e'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['e'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[36:41]
-                results['f'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['f'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 results['g'][i - 1] = results['a'][i - 1]
 
                 n_mix = 128
                 training = training_list[0:16]
-                results['h'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['h'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[0:31]
-                results['i'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['i'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[0:16] + training_list[21:26]
-                results['j'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['j'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[4:16] + training_list[21:26]
-                results['k'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['k'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 n_mix = 32
                 training = training_list[8:16] + training_list[21:26]
-                results['l'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['l'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 training = training_list[12:16] + training_list[21:26]
-                results['m'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['m'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
                 results['n'][i - 1] = results['e'][i - 1]
 
                 training = training_list[16:31]
-                results['o'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
+                results['o'][i - 1] = test_evaluation(training, fs, testing_dict, n_mix)
 
             i += 1
 
