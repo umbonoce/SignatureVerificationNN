@@ -357,7 +357,6 @@ def testing():
         plt.show()
 
 
-
 def knn_experiment():
 
     with open('features_GMM.csv', mode='r') as feature_file:
@@ -378,11 +377,12 @@ def knn_experiment():
                 second = np.sum(len (x) for x in training_list[4:8])
                 third = np.sum(len (x) for x in training_list[8:12])
                 fourth = np.sum(len(x) for x in training_list[12:16])
-                fifth = np.sum(len(x) for x in training_list[16:31])
-                sixth = np.sum(len(x) for x in training_list[31:41])
+                fifth = np.sum(len(x) for x in training_list[21:25])
+                sixth = np.sum(len(x) for x in training_list[36:40])
 
                 df_training = pd.DataFrame()
                 print(first)
+                training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
                 for element in training_list:
                     df_training = df_training.append(element[fs])
 
@@ -394,7 +394,7 @@ def knn_experiment():
                 labels.extend('6' for counter in range(0,sixth))
 
                 df_labels = pd.DataFrame(data=labels, columns=['Y'])
-                knn.fit(df_training,df_labels)
+                knn.fit(df_training, df_labels)
                 print(len(df_training))
                 print(len(df_labels))
 

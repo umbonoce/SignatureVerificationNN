@@ -70,15 +70,11 @@ def load_dataset(user):
                 testing_dict['genuine'].append(df)
             else:
                 training_list.append(df)
-                if i % 4 == 0:
-                    validation_fs_dict['true'].append(df)
-                else:
-                    training_fs_list.append(df)
 
-        else:
-            print(file)
+    training_fs_list = training_list[0:16] + training_list[21:25] + training_list[36:40]  # 1-4, 5.2, 6.2
+    validation_fs_dict['true'] = training_list[31:35]  # 6.1 (4s)
 
-    for i in range(0, 20):
+    for i in range(0, 10):
         numbers = [x for x in range(1, 30)]
         numbers.remove(user)
         y = random.choice(numbers)
@@ -215,14 +211,16 @@ def feature_selection(training_set, validation_set):
     while k != 9:
 
         best_score = 1
+        best_trust = 0
         best_feature = ""
         feature_set = subset.copy()
 
         for f in (total_features - subset):
             feature_set.add(f)
-            score = evaluate_score(training_set, validation_set, list(feature_set))
+            score, trust = evaluate_score(training_set, validation_set, list(feature_set))
             feature_set.remove(f)
-            if score < best_score:
+            if (score < best_score) or (score == best_score and trust > best_trust):
+                best_trust = trust
                 best_score = score
                 best_feature = f
 
@@ -246,9 +244,9 @@ def feature_selection(training_set, validation_set):
 
                 for f in subset:
                     feature_set.remove(f)
-                    score = evaluate_score(training_set, validation_set,list(feature_set))
+                    score, trust = evaluate_score(training_set, validation_set,list(feature_set))
                     feature_set.add(f)
-                    if score <= removed_score:
+                    if score < removed_score:
                         removed_score = score
                         worst_feature = f
 
@@ -335,11 +333,12 @@ def evaluate_score(train_set,valid_set, features):
         print(f"threshold: {threshold} eer: {equal_error_rate}")
     except:
         equal_error_rate = 1
+        threshold = 0
         print("Fit Training Error")
 
     print(f"equal error rate: {equal_error_rate}")
 
-    return equal_error_rate
+    return equal_error_rate,threshold
 
 
 def test_evaluation(train_set, features, valid_set, n_mix):
@@ -442,10 +441,10 @@ def testing():
                 training = training_list[12:16]
                 results['d'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
-                training = training_list[21:26]
+                training = training_list[21:25]
                 results['e'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
-                training = training_list[36:41]
+                training = training_list[36:40]
                 results['f'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
                 results['g'][i - 1] = results['a'][i - 1]
@@ -457,17 +456,17 @@ def testing():
                 training = training_list[0:31]
                 results['i'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
-                training = training_list[0:16] + training_list[21:26]
+                training = training_list[0:16] + training_list[21:25]
                 results['j'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
-                training = training_list[4:16] + training_list[21:26]
+                training = training_list[4:16] + training_list[21:25]
                 results['k'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
                 n_mix = 32
-                training = training_list[8:16] + training_list[21:26]
+                training = training_list[8:16] + training_list[21:25]
                 results['l'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
-                training = training_list[12:16] + training_list[21:26]
+                training = training_list[12:16] + training_list[21:25]
                 results['m'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
                 results['n'][i - 1] = results['e'][i - 1]
@@ -503,10 +502,10 @@ def start_fs():
 
         training_list, testing_dict, training_fs, validation_fs = load_dataset(i)
         subset, eer = feature_selection(training_fs, validation_fs)
-        with open('features_GMM.csv', mode='a') as feature_file:
+        with open('features_GMM_thr.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
             feature_writer.writerow(subset)
 
-testing()
+start_fs()
