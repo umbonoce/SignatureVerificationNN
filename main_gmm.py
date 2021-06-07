@@ -45,7 +45,7 @@ def second_order_regression(data_list):
 
 def load_dataset(user):
     training_list = list()  # dictionary of all training dataframes [1..40]
-    testing_dict = {'skilled': [], 'genuine': []}  # dictionary of all testing dataframes [41..56]
+    testing_dict = {'skilled': [], 'genuine': [], 'random': []}  # dictionary of all testing dataframes [41..56]
     training_fs_list = list()  # list of training dataframes (feature selection) [alltrain - validation]
     validation_fs_dict = {'true': [],
                           'false': []}  # dictionary of validation dataframes (feature selection) [one true for each session, 18 false random]
@@ -70,11 +70,15 @@ def load_dataset(user):
                 testing_dict['genuine'].append(df)
             else:
                 training_list.append(df)
+                if i % 4 == 0:
+                    validation_fs_dict['true'].append(df)
+                else:
+                    training_fs_list.append(df)
 
-    training_fs_list = training_list[0:16] + training_list[21:25] + training_list[36:40]  # 1-4, 5.2, 6.2
-    validation_fs_dict['true'] = training_list[31:35]  # 6.1 (4s)
+        else:
+            print(file)
 
-    for i in range(0, 10):
+    for i in range(0, 20):
         numbers = [x for x in range(1, 30)]
         numbers.remove(user)
         y = random.choice(numbers)
@@ -85,6 +89,16 @@ def load_dataset(user):
                          names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
         df = initialize_dataset(df)
         validation_fs_dict['false'].append(df)
+
+    for u in range(1,30):
+        if u != user:
+            path_user = path + str(u) + '/'
+            files = os.listdir(path_user)
+            z = random.randint(10, 40)
+            df = pd.read_csv(path_user + files[z], header=0, sep=' ',
+                             names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
+            df = initialize_dataset(df)
+            testing_dict['random'].append(df)
 
     return training_list, testing_dict, training_fs_list, validation_fs_dict
 
@@ -232,6 +246,7 @@ def feature_selection(training_set, validation_set):
         print("best " + str(best_feature))
 
         still_remove = True
+        first_time = True
 
         while still_remove:
 
@@ -244,25 +259,27 @@ def feature_selection(training_set, validation_set):
 
                 for f in subset:
                     feature_set.remove(f)
-                    score, trust = evaluate_score(training_set, validation_set,list(feature_set))
+                    score, trust = evaluate_score(training_set, validation_set, list(feature_set))
                     feature_set.add(f)
                     if score < removed_score:
                         removed_score = score
                         worst_feature = f
 
-                if removed_score < last_score[k-1]:  # if you get better than before adding, keep removing features
-                    last_score[k-1] = removed_score
-                    subset.remove(worst_feature)
-                    k -= 1
-                    print("removed" + str(worst_feature))
-                    still_remove = True
-                else:                           # otherwhise removed score is worse than before, go adding features
+                if (worst_feature == best_feature) and first_time:
                     still_remove = False
+                else:
+                    if removed_score >= last_score[k-1]:  # if removed score is worse than before, go adding features
+                        still_remove = False
+                    else: # otherwise keep removing features
+                        subset.remove(worst_feature)
+                        k -= 1
+                        first_time = False
+                        print("removed" + str(worst_feature))
             else:
-                k = 1
                 still_remove = False
 
-    return subset, best_score
+    return subset, best_score, best_trust
+
 
 
 def evaluate_score(train_set,valid_set, features):
@@ -395,7 +412,7 @@ def test_evaluation(train_set, features, valid_set, n_mix):
             i += 1
             print(f" prob signature testing skilled {i}: {score}")
 
-        labels = [1] * 5 + [0] * 10
+        labels = [1] * len(score_test_gen) + [0] * len(score_test_skilled)
         probs = np.concatenate([score_test_gen, score_test_skilled])
         fpr, tpr, thresh = roc_curve(labels, probs)
         equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
@@ -416,7 +433,7 @@ def testing():
     for i in exp:
         results[i] = [None] * N_USERS
 
-    with open('features_GMM.csv', mode='r') as feature_file:
+    with open('features_GMM_tolosana.csv', mode='r') as feature_file:
         feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         i = 0
         for (fs) in feature_reader:
@@ -501,11 +518,11 @@ def start_fs():
     for i in range(1, 30):
 
         training_list, testing_dict, training_fs, validation_fs = load_dataset(i)
-        subset, eer = feature_selection(training_fs, validation_fs)
-        with open('features_GMM_thr.csv', mode='a') as feature_file:
+        subset, eer, thr = feature_selection(training_fs, validation_fs)
+        with open('features_GMM_tolosana.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
             feature_writer.writerow(subset)
 
-start_fs()
+testing()

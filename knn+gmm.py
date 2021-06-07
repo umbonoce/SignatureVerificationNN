@@ -12,6 +12,9 @@ from scipy.optimize import brentq
 from sklearn.metrics import roc_curve
 from sklearn.neighbors import KNeighborsClassifier
 from collections import Counter
+from sklearn.cluster import KMeans
+from sklearn.datasets import make_blobs
+from yellowbrick.cluster import KElbowVisualizer, SilhouetteVisualizer
 
 warnings.filterwarnings("ignore")
 N_USERS = 29
@@ -357,6 +360,40 @@ def testing():
         plt.show()
 
 
+def kmeans_exp():
+
+    with open('features_GMM.csv', mode='r') as feature_file:
+        feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        i = 0
+        for fs in feature_reader:
+            if i > 0:
+                print(f"user n#{i}")
+                print(fs)
+                fs.pop()
+                df_training = pd.DataFrame()
+                training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
+                training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
+                for element in training_list:
+                    df_training = df_training.append(element)
+
+                # knn = KNeighborsClassifier()
+                model = KMeans(n_clusters=6, random_state=42).fit(df_training)
+
+
+
+                for signature in testing_dict['genuine']:
+                    cluster = model.predict(signature)
+                    print("testing signature:")
+                    occurences = Counter(cluster)
+                    print(occurences)
+
+                visualizer = SilhouetteVisualizer(model)
+                visualizer.fit(df_training)
+                visualizer.show()
+
+            i+=1
+
+
 def knn_experiment():
 
     with open('features_GMM.csv', mode='r') as feature_file:
@@ -381,7 +418,6 @@ def knn_experiment():
                 sixth = np.sum(len(x) for x in training_list[36:40])
 
                 df_training = pd.DataFrame()
-                print(first)
                 training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
                 for element in training_list:
                     df_training = df_training.append(element[fs])
@@ -395,8 +431,7 @@ def knn_experiment():
 
                 df_labels = pd.DataFrame(data=labels, columns=['Y'])
                 knn.fit(df_training, df_labels)
-                print(len(df_training))
-                print(len(df_labels))
+
 
                 for signature in testing_dict["genuine"]:
                     a = signature[fs]
