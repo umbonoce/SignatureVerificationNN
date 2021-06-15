@@ -9,41 +9,94 @@ paper_gmm = [14.0, 16.5, 12.5, 14.0, 9.5, 3.0, 14.0, 8.5, 4.0, 5.0, 5.0, 5.0, 6.
 
 random_hmm = [8.620689655175099, 5.4926108374416724, 6.699507389160926, 4.950738916260591, 5.689655172412874, 2.832512315273469, 8.620689655175099, 2.6847290640443755, 0.8128078817748978, 0.9359605911348048, 0.9359605911363533, 2.167487684744208, 1.5517241379348468, 5.689655172412874, 1.7980295566549418]
 random_gmm = [7.019704433500265, 6.157635467978439, 6.7241379310449645, 4.137931034489598, 2.33990147782828, 0.0, 7.019704433500265, 2.463054187199458, 0.36945812807986467, 1.4285714285744748, 1.182266009856236, 1.2315270935941465, 1.1083743842394655, 2.33990147782828, 1.4778325123220872]
-
 paper_random_hmm = [5.75, 8.0, 5.0, 7.0, 7.75, 1.0, 5.5, 0.75, 0.0, 0.25, 0.25, 0.25, 1.75, 7.5, 7.0]
 paper_random_gmm = [4.0, 9.0, 5.0, 7.25, 7.0, 1.0, 4.0, 0.75, 0.75, 0.75, 0.85, 1.0, 1.5, 7.0, 3.5]
+#
+# rows = [[] * 3] * len(exp)
+#
+# for i in range(0, len(exp)):
+#     rows[i] = ["{:02.2f}".format(paper_random_hmm[i]/100)]
+#
+# print("GMM RESULTS")
+# print(tabulate(rows, headers=["Exp.", "EER Ref.", "EER Our"]))
 
-rows = [[] * 3] * len(exp)
+# for i in range(0, len(exp)):
+#     rows[i] = [exp[i], round(paper_gmm[i],  2), round(random_gmm[i], 2)]
+#
+# print("HMM RESULTS")
+# print(tabulate(rows, headers=["Exp.", "EER(%) Ref.", "EER(%) Our"]))
 
-for i in range(0, len(exp)-1):
-    rows[i] = [exp[i], round(paper_hmm[i], 2), round(random_hmm[i], 2)]
+# plt.plot(exp[0:6], eer_gmm[0:6], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[0:6], paper_gmm[0:6], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Ageing Experiments (a-f) on GMM-based System (Skilled Forgeries)")
+# plt.legend()
+# plt.show()
+#
+# plt.plot(exp[6:15], eer_gmm[6:15], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[6:15], paper_gmm[6:15], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Template Update Experiments (f-o) on GMM-based System (Skilled Forgeries)")
+# plt.legend()
+# plt.show()
+#
+# plt.plot(exp[0:6], random_gmm[0:6], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[0:6], paper_random_gmm[0:6], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Ageing Experiments (a-f) on GMM-based System (Random Forgeries)")
+# plt.legend()
+# plt.show()
+#
+# plt.plot(exp[6:15], random_gmm[6:15], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[6:15], paper_random_gmm[6:15], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Template Update Experiments (f-o) on GMM-based System (Random Forgeries)")
+# plt.legend()
+# plt.show()
+#
+# plt.plot(exp[0:6], eer_hmm[0:6], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[0:6], paper_hmm[0:6], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Ageing Experiments (a-f) on HMM-based System (Skilled Forgeries)")
+# plt.legend()
+# plt.show()
+#
+# plt.plot(exp[6:15], eer_hmm[6:15], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[6:15], paper_hmm[6:15], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Template Update Experiments (f-o) on HMM-based System (Skilled Forgeries)")
+# plt.legend()
+# plt.show()
+#
+# plt.plot(exp[0:6], random_hmm[0:6], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[0:6], paper_random_hmm[0:6], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Ageing Experiments (a-f) on HMM-based System (Random Forgeries)")
+# plt.legend()
+# plt.show()
+#
+# plt.plot(exp[6:15], random_hmm[6:15], color='r', linestyle='dashed', marker='o', label='This Work Exp.')
+# plt.plot(exp[6:15], paper_random_hmm[6:15], color='b', linestyle='dashed', marker='*', label='BiDA Lab Exp.')
+# plt.grid(b=True)
+# plt.ylabel('EER (%)')
+# plt.xlabel('Experiments')
+# plt.title("Template Update Experiments (f-o) on HMM-based System (Random Forgeries)")
+# plt.legend()
+# plt.show()
 
-print("GMM RESULTS")
-print(tabulate(rows, headers=["Exp.", "EER(%) Ref.", "EER(%) Our"]))
-
-for i in range(0, len(exp)-1):
-    rows[i] = [exp[i], round(paper_gmm[i],  2), round(random_gmm[i], 2)]
-
-print("HMM RESULTS")
-print(tabulate(rows, headers=["Exp.", "EER(%) Ref.", "EER(%) Our"]))
-
-
-plt.plot(exp[0:6], random_hmm[0:6], color='r', linestyle='dashed', marker='o', label='nostro')
-#plt.plot(exp[0:6], random_gmm2[0:6], color='g', linestyle='dashed', marker='s', label='new')
-plt.plot(exp[0:6], paper_random_hmm[0:6], color='b', linestyle='dashed', marker='*', label='paper')
-plt.grid(b=True)
-plt.ylabel('EER (%)')
-plt.xlabel('Experiments')
-plt.title("Ageing Experiments (a-f)")
-plt.legend()
-plt.show()
-
-plt.plot(exp[6:15], random_hmm[6:15], color='r', linestyle='dashed', marker='o', label='nostro')
-#plt.plot(exp[6:15], random_gmm2[6:15], color='g', linestyle='dashed', marker='s', label='new')
-plt.plot(exp[6:15], paper_random_hmm[6:15], color='b', linestyle='dashed', marker='*', label='paper')
-plt.grid(b=True)
-plt.ylabel('EER (%)')
-plt.xlabel('Experiments')
-plt.title("Template Update Experiments (f-o)")
-plt.legend()
-plt.show()
+behavior_gmm5 = [5.172413793094985, 2.0443349753728125]
+behavior_gmm6 = [2.4137931034463223, 0.49261083743976536]

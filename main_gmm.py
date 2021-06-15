@@ -10,9 +10,10 @@ import random
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 from sklearn.metrics import roc_curve
+from sklearn.neighbors import KNeighborsClassifier
+from collections import Counter
 warnings.filterwarnings("ignore")
 np.random.seed(42)  # pseudorandomic
-
 N_USERS = 29
 
 # tanh normalization; values between 0 and 1
@@ -425,15 +426,129 @@ def test_evaluation(train_set, features, valid_set, n_mix):
     return equal_error_rate
 
 
+def knn_experiment(k, fs):
+
+    train_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(k)
+
+    training_list = [None] * len(train_list)
+    count_training = 0
+
+    for signature in train_list:
+        training_list[count_training] = signature[fs]
+        count_training += 1
+
+    knn = KNeighborsClassifier(n_neighbors=5)
+    labels = list()
+    models = list()
+    splits = list()
+
+    splits.append(training_list[0:4])
+    splits.append(training_list[4:8])
+    splits.append(training_list[8:12])
+    splits.append(training_list[12:16])
+    splits.append(training_list[21:25])
+    splits.append(training_list[36:40])
+
+    first = np.sum(len(x) for x in training_list[0:4])
+    second = np.sum(len(x) for x in training_list[4:8])
+    third = np.sum(len(x) for x in training_list[8:12])
+    fourth = np.sum(len(x) for x in training_list[12:16])
+    fifth = np.sum(len(x) for x in training_list[21:25])
+    sixth = np.sum(len(x) for x in training_list[36:40])
+
+    x_train = pd.concat(training_list[0:4])
+    models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+    x_train = pd.concat(training_list[4:8])
+    models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+    x_train = pd.concat(training_list[8:12])
+    models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+    x_train = pd.concat(training_list[12:16])
+    models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+    x_train = pd.concat(training_list[21:25])
+    models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+    x_train = pd.concat(training_list[36:40])
+    models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+
+    df_training = pd.DataFrame()
+    training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
+    for element in training_list:
+        df_training = df_training.append(element)
+
+    labels.extend('1' for counter in range(0, first))
+    labels.extend('2' for counter in range(0, second))
+    labels.extend('3' for counter in range(0, third))
+    labels.extend('4' for counter in range(0, fourth))
+    labels.extend('5' for counter in range(0, fifth))
+    labels.extend('6' for counter in range(0, sixth))
+
+    df_labels = pd.DataFrame(data=labels, columns=['Y'])
+    knn.fit(df_training, df_labels)
+
+    average_training = [None] * len(models)
+    score_test_gen = [None] * len(testing_dict["genuine"])
+    score_test_skilled = [None] * len(testing_dict["skilled"])
+
+    for m in range(0, 6):
+        count_training = 0
+        score_training = [None] * 4
+        for signature in splits[m]:
+            score_training[count_training] = models[m].score(signature)
+            count_training += 1
+        average_training[m] = np.average(score_training)
+
+    i = 0
+    for signature in testing_dict["genuine"]:
+        a = signature[fs]
+        score = knn.predict(a)
+        occurrences = Counter(score)
+        print(occurrences)
+        index = int(max(occurrences, key=occurrences.get)) - 1
+        score = models[index].score(a)
+        distance = np.abs(score - average_training[index])
+        score_test_gen[i] = np.exp(distance * (-1)/len(fs))
+        i += 1
+
+    i = 0
+    for signature in testing_dict["skilled"]:
+        a = signature[fs]
+        score = knn.predict(a)
+        occurrences = Counter(score)
+        print(occurrences)
+        index = int(max(occurrences, key=occurrences.get)) - 1
+        score = models[index].score(a)
+        distance = np.abs(score - average_training[index])
+        score_test_skilled[i] = np.exp(distance *(-1)/len(fs))
+        i += 1
+
+    i = 0
+    for score in score_test_gen:
+        i += 1
+        print(f" prob signature testing genuine {i}: {score}")
+
+    i = 0
+    for score in score_test_skilled:
+        i += 1
+        print(f" prob signature testing skilled {i}: {score}")
+
+    labels = [1] * len(score_test_gen) + [0] * len(score_test_skilled)
+    probs = np.concatenate([score_test_gen, score_test_skilled])
+    fpr, tpr, thresh = roc_curve(labels, probs)
+    equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+    threshold = interp1d(fpr, thresh)(equal_error_rate)
+    print(f"threshold: {threshold} eer: {equal_error_rate}")
+
+    return equal_error_rate
+
+
 def testing():
 
-    exp = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o']
+    exp = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p']
 
     results = dict()
     for i in exp:
         results[i] = [None] * N_USERS
 
-    with open('features_GMM_tolosana.csv', mode='r') as feature_file:
+    with open('features_GMM.csv', mode='r') as feature_file:
         feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         i = 0
         for (fs) in feature_reader:
@@ -491,9 +606,11 @@ def testing():
                 training = training_list[16:31]
                 results['o'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
+                results['p'][i - 1] = knn_experiment(i, fs)
+
             i += 1
 
-        eer = [None] * 15
+        eer = [None] * len(exp)
         i = 0
         for e in exp:
             eer[i] = np.average(results[e])*100
@@ -513,6 +630,134 @@ def testing():
         plt.show()
 
 
+def knn_testing(type):
+
+    with open('features_GMM.csv', mode='r') as feature_file:
+        feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        k = 0
+        eer = list()
+        for fs in feature_reader:
+            if k > 0:
+                print(f"user n#{k}")
+                print(fs)
+                fs.pop()
+
+                train_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(k)
+
+                training_list = [None] * len(train_list)
+                count_training = 0
+
+                for signature in train_list:
+                    training_list[count_training] = signature[fs]
+                    count_training += 1
+
+                knn = KNeighborsClassifier(n_neighbors=5)
+                labels = list()
+                models = list()
+                splits = list()
+
+                splits.append(training_list[0:4])
+                splits.append(training_list[4:8])
+                splits.append(training_list[8:12])
+                splits.append(training_list[12:16])
+                splits.append(training_list[21:25])
+                splits.append(training_list[36:40])
+
+                first = np.sum(len(x) for x in training_list[0:4])
+                second = np.sum(len(x) for x in training_list[4:8])
+                third = np.sum(len(x) for x in training_list[8:12])
+                fourth = np.sum(len(x) for x in training_list[12:16])
+                fifth = np.sum(len(x) for x in training_list[21:25])
+                sixth = np.sum(len(x) for x in training_list[36:40])
+
+                x_train = pd.concat(training_list[0:4])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[4:8])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[8:12])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[12:16])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[21:25])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[36:40])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+
+                df_training = pd.DataFrame()
+                #training_list = training_list[0:16] + training_list[21:25]
+                training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
+                for element in training_list:
+                    df_training = df_training.append(element)
+
+                labels.extend('1' for counter in range(0, first))
+                labels.extend('2' for counter in range(0, second))
+                labels.extend('3' for counter in range(0, third))
+                labels.extend('4' for counter in range(0, fourth))
+                labels.extend('5' for counter in range(0, fifth))
+                labels.extend('6' for counter in range(0, sixth))
+
+                df_labels = pd.DataFrame(data=labels, columns=['Y'])
+                knn.fit(df_training, df_labels)
+
+                average_training = [None] * len(models)
+                score_test_gen = [None] * len(testing_dict["genuine"])
+                score_test_skilled = [None] * len(testing_dict[type])
+
+                for m in range(0, len(models)):
+                    count_training = 0
+                    score_training = [None] * 4
+                    for signature in splits[m]:
+                        score_training[count_training] = models[m].score(signature)
+                        count_training += 1
+                    average_training[m] = np.average(score_training)
+
+                i = 0
+                for signature in testing_dict["genuine"]:
+                    a = signature[fs]
+                    score = knn.predict(a)
+                    occurrences = Counter(score)
+                    print(occurrences)
+                    index = int(max(occurrences, key=occurrences.get)) - 1
+                    score = models[index].score(a)
+                    distance = np.abs(score - average_training[index])
+                    score_test_gen[i] = np.exp(distance * (-1)/len(fs))
+                    i += 1
+
+                i = 0
+                for signature in testing_dict[type]:
+                    a = signature[fs]
+                    score = knn.predict(a)
+                    occurrences = Counter(score)
+                    print(occurrences)
+                    index = int(max(occurrences, key=occurrences.get)) - 1
+                    score = models[index].score(a)
+                    distance = np.abs(score - average_training[index])
+                    score_test_skilled[i] = np.exp(distance *(-1)/len(fs))
+                    i += 1
+
+                i = 0
+                for score in score_test_gen:
+                    i += 1
+                    print(f" prob signature testing genuine {i}: {score}")
+
+                i = 0
+                for score in score_test_skilled:
+                    i += 1
+                    print(f" prob signature testing {type} {i}: {score}")
+
+                labels = [1] * len(score_test_gen) + [0] * len(score_test_skilled)
+                probs = np.concatenate([score_test_gen, score_test_skilled])
+                fpr, tpr, thresh = roc_curve(labels, probs)
+                equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+                threshold = interp1d(fpr, thresh)(equal_error_rate)
+                print(f"threshold: {threshold} eer: {equal_error_rate}")
+                eer.append(equal_error_rate)
+
+            k += 1
+        average_eer = np.average(eer)
+        return average_eer*100
+
+
 def start_fs():
 
     for i in range(1, 30):
@@ -525,4 +770,9 @@ def start_fs():
             subset.append(eer)
             feature_writer.writerow(subset)
 
-testing()
+
+eer_1 = knn_testing("skilled")
+eer_2 = knn_testing("random")
+
+print(eer_1)
+print(eer_2)
