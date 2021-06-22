@@ -280,14 +280,14 @@ def knn_experiment():
                 splits.append(training_list[8:12])
                 splits.append(training_list[12:16])
                 splits.append(training_list[21:25])
-                #splits.append(training_list[36:40])
+                splits.append(training_list[36:40])
 
                 first = np.sum(len(x) for x in training_list[0:4])
                 second = np.sum(len(x) for x in training_list[4:8])
                 third = np.sum(len(x) for x in training_list[8:12])
                 fourth = np.sum(len(x) for x in training_list[12:16])
                 fifth = np.sum(len(x) for x in training_list[21:25])
-                #sixth = np.sum(len(x) for x in training_list[36:40])
+                sixth = np.sum(len(x) for x in training_list[36:40])
 
                 x_train = pd.concat(training_list[0:4])
                 models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
@@ -299,11 +299,11 @@ def knn_experiment():
                 models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
                 x_train = pd.concat(training_list[21:25])
                 models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
-                #x_train = pd.concat(training_list[36:40])
-                #models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[36:40])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
 
                 df_training = pd.DataFrame()
-                training_list = training_list[0:16] + training_list[21:25]
+                training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
                 for element in training_list:
                     df_training = df_training.append(element)
 
@@ -312,7 +312,7 @@ def knn_experiment():
                 labels.extend('3' for counter in range(0, third))
                 labels.extend('4' for counter in range(0, fourth))
                 labels.extend('5' for counter in range(0, fifth))
-                #labels.extend('6' for counter in range(0, sixth))
+                labels.extend('6' for counter in range(0, sixth))
 
                 df_labels = pd.DataFrame(data=labels, columns=['Y'])
                 knn.fit(df_training, df_labels)
