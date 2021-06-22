@@ -11,6 +11,8 @@ import random
 from scipy.interpolate import interp1d
 from scipy.optimize import brentq
 from sklearn.metrics import roc_curve
+from sklearn.neighbors import KNeighborsClassifier
+from collections import Counter
 warnings.filterwarnings("ignore")
 np.random.seed(42)  # pseudorandomic
 
@@ -46,7 +48,7 @@ def second_order_regression(data_list):
 
 def load_dataset(user):
     training_list = list()  # dictionary of all training dataframes [1..40]
-    testing_dict = {'skilled': [], 'genuine': []}  # dictionary of all testing dataframes [41..56]
+    testing_dict = {'skilled': [], 'genuine': [], 'random': []}  # dictionary of all testing dataframes [41..56]
     training_fs_list = list()  # list of training dataframes (feature selection) [alltrain - validation]
     validation_fs_dict = {'true': [],
                           'false': []}  # dictionary of validation dataframes (feature selection) [one true for each session, 18 false random]
@@ -90,6 +92,16 @@ def load_dataset(user):
                          names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
         df = initialize_dataset(df)
         validation_fs_dict['false'].append(df)
+
+    for u in range(1,30):
+        if u != user:
+            path_user = path + str(u) + '/'
+            files = os.listdir(path_user)
+            z = random.randint(10, 40)
+            df = pd.read_csv(path_user + files[z], header=0, sep=' ',
+                             names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
+            df = initialize_dataset(df)
+            testing_dict['random'].append(df)
 
     return training_list, testing_dict, training_fs_list, validation_fs_dict
 
@@ -216,14 +228,16 @@ def feature_selection(training_set, validation_set):
     while k != 9:
 
         best_score = 1
+        best_trust = 0
         best_feature = ""
         feature_set = subset.copy()
 
         for f in (total_features - subset):
             feature_set.add(f)
-            score = evaluate_score(training_set, validation_set, list(feature_set))
+            score, trust = evaluate_score(training_set, validation_set, list(feature_set))
             feature_set.remove(f)
-            if score < best_score:
+            if (score < best_score) or (score == best_score and trust > best_trust):
+                best_trust = trust
                 best_score = score
                 best_feature = f
 
@@ -235,6 +249,7 @@ def feature_selection(training_set, validation_set):
         print("best " + str(best_feature))
 
         still_remove = True
+        first_time = True
 
         while still_remove:
 
@@ -247,25 +262,27 @@ def feature_selection(training_set, validation_set):
 
                 for f in subset:
                     feature_set.remove(f)
-                    score = evaluate_score(training_set, validation_set,list(feature_set))
+                    score, trust = evaluate_score(training_set, validation_set, list(feature_set))
                     feature_set.add(f)
-                    if score <= removed_score:
+                    if score < removed_score:
                         removed_score = score
                         worst_feature = f
 
-                if removed_score < last_score[k-1]:  # if you get better than before adding, keep removing features
-                    last_score[k-1] = removed_score
-                    subset.remove(worst_feature)
-                    k -= 1
-                    print("removed" + str(worst_feature))
-                    still_remove = True
-                else:                           # otherwhise removed score is worse than before, go adding features
+                if (worst_feature == best_feature) and first_time:
                     still_remove = False
+                else:
+                    if removed_score >= last_score[k-1]:  # if removed score is worse than before, go adding features
+                        still_remove = False
+                    else: # otherwise keep removing features
+                        # last_score[k-1] = removed_score
+                        subset.remove(worst_feature)
+                        k -= 1
+                        first_time = False
+                        print("removed" + str(worst_feature))
             else:
-                k = 1
                 still_remove = False
 
-    return subset, best_score
+    return subset, best_score, best_trust
 
 
 def evaluate_score(train_set, valid_set, features):
@@ -314,12 +331,12 @@ def evaluate_score(train_set, valid_set, features):
         i = 0
         for score in score_test_gen:
             i += 1
-            print(f" prob signature testing genuine {i}: {score}")
+            # print(f" prob signature testing genuine {i}: {score}")
 
         i = 0
         for score in score_test_skilled:
             i += 1
-            print(f" prob signature testing skilled {i}: {score}")
+            # print(f" prob signature testing skilled {i}: {score}")
 
         labels = [1] * len(validation_set["true"]) + [0] * len(validation_set["false"])
         probs = np.concatenate([score_test_gen, score_test_skilled])
@@ -331,11 +348,12 @@ def evaluate_score(train_set, valid_set, features):
     except:
 
         equal_error_rate = 1
+        threshold = 0
         print("Fit Training Error")
 
     print(f"equal error rate: {equal_error_rate}")
 
-    return equal_error_rate
+    return equal_error_rate, threshold
 
 
 def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
@@ -344,7 +362,6 @@ def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
     training_set = train_set.copy()
     validation_set = valid_set.copy()
     x_list = [signature[features] for signature in training_set]
-    lengths_train = [len(signature) for signature in x_list]
     x_train = pd.concat(x_list)
 
     try:
@@ -391,9 +408,9 @@ def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
         i = 0
         for score in score_test_skilled:
             i += 1
-            print(f" prob signature testing skilled {i}: {score}")
+            print(f" prob signature testing random {i}: {score}")
 
-        labels = [1] * 5 + [0] * 10
+        labels = [1] * len(score_test_gen) + [0] * len(score_test_skilled)
         probs = np.concatenate([score_test_gen, score_test_skilled])
         fpr, tpr, thresh = roc_curve(labels, probs)
         equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
@@ -406,15 +423,125 @@ def test_evaluation(train_set, features, valid_set, n_comp, n_mix):
     return equal_error_rate
 
 
+def knn_experiment(k, fs, type):
+
+    train_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(k)
+
+    training_list = [None] * len(train_list)
+    count_training = 0
+
+    for signature in train_list:
+        training_list[count_training] = signature[fs]
+        count_training += 1
+
+    knn = KNeighborsClassifier(n_neighbors=5)
+    labels = list()
+    models = list()
+    splits = list()
+
+    splits.append(training_list[0:4])
+    splits.append(training_list[4:8])
+    splits.append(training_list[8:12])
+    splits.append(training_list[12:16])
+    splits.append(training_list[21:25])
+    splits.append(training_list[36:40])
+
+    first = np.sum(len(x) for x in training_list[0:4])
+    second = np.sum(len(x) for x in training_list[4:8])
+    third = np.sum(len(x) for x in training_list[8:12])
+    fourth = np.sum(len(x) for x in training_list[12:16])
+    fifth = np.sum(len(x) for x in training_list[21:25])
+    sixth = np.sum(len(x) for x in training_list[36:40])
+
+    for split in splits:
+        x_train = pd.concat(split)
+        models.append(hmm.GMMHMM(n_components=2, n_mix=16, random_state=42).fit(x_train))
+
+    df_training = pd.DataFrame()
+    #training_list = training_list[0:16] + training_list[21:25]
+    training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
+    for element in training_list:
+        df_training = df_training.append(element)
+
+    labels.extend('1' for counter in range(0, first))
+    labels.extend('2' for counter in range(0, second))
+    labels.extend('3' for counter in range(0, third))
+    labels.extend('4' for counter in range(0, fourth))
+    labels.extend('5' for counter in range(0, fifth))
+    labels.extend('6' for counter in range(0, sixth))
+
+    df_labels = pd.DataFrame(data=labels, columns=['Y'])
+    knn.fit(df_training, df_labels)
+
+    average_training = [None] * len(models)
+    score_test_gen = [None] * len(testing_dict["genuine"])
+    score_test_skilled = [None] * len(testing_dict[type])
+
+    for m in range(0, len(splits)):
+        count_training = 0
+        score_training = [None] * 4
+        for signature in splits[m]:
+            try:
+                score_training[count_training] = models[m].score(signature)/len(signature)
+            except:
+                score_training[count_training] = 0
+            count_training += 1
+
+        average_training[m] = np.average(score_training)
+
+    i = 0
+    for signature in testing_dict["genuine"]:
+        a = signature[fs]
+        score = knn.predict(a)
+        occurrences = Counter(score)
+        print(occurrences)
+        index = int(max(occurrences, key=occurrences.get)) - 1
+        score = models[index].score(a)/len(signature)
+        distance = np.abs(score - average_training[index])
+        score_test_gen[i] = np.exp(distance * (-1)/len(fs))
+        i += 1
+
+    i = 0
+    for signature in testing_dict[type]:
+        a = signature[fs]
+        score = knn.predict(a)
+        occurrences = Counter(score)
+        print(occurrences)
+        index = int(max(occurrences, key=occurrences.get)) - 1
+        score = models[index].score(a)/len(signature)
+        distance = np.abs(score - average_training[index])
+        score_test_skilled[i] = np.exp(distance * (-1)/len(fs))
+        i += 1
+
+    i = 0
+    for score in score_test_gen:
+        i += 1
+        print(f" prob signature testing genuine {i}: {score}")
+
+    i = 0
+    for score in score_test_skilled:
+        i += 1
+        print(f" prob signature testing {type} {i}: {score}")
+
+    labels = [1] * len(score_test_gen) + [0] * len(score_test_skilled)
+    probs = np.concatenate([score_test_gen, score_test_skilled])
+    fpr, tpr, thresh = roc_curve(labels, probs)
+    equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+    threshold = interp1d(fpr, thresh)(equal_error_rate)
+    print(f"threshold: {threshold} eer: {equal_error_rate}")
+
+    return equal_error_rate
+
+
 def testing():
 
-    exp = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o']
+    exp = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p']
 
     results = dict()
     for i in exp:
         results[i] = [None] * N_USERS
 
-    with open('features_HMM.csv', mode='r') as feature_file:
+    with open('features_HMM_tolosana.csv', mode='r') as feature_file:
         feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         i = 0
         for (fs) in feature_reader:
@@ -440,10 +567,10 @@ def testing():
                 training = training_list[12:16]
                 results['d'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
-                training = training_list[21:26]
+                training = training_list[21:25]
                 results['e'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
-                training = training_list[36:41]
+                training = training_list[36:40]
                 results['f'][i - 1] = test_evaluation(training, fs, testing_dict, 1, 16)
 
                 results['g'][i - 1] = results['a'][i - 1]
@@ -456,18 +583,18 @@ def testing():
                 training = training_list[0:31]
                 results['i'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
-                training = training_list[0:16] + training_list[21:26]
+                training = training_list[0:16] + training_list[21:25]
                 results['j'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
-                training = training_list[4:16] + training_list[21:26]
+                training = training_list[4:16] + training_list[21:25]
                 results['k'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 n_mix = 16
                 n_comp = 2
-                training = training_list[8:16] + training_list[21:26]
+                training = training_list[8:16] + training_list[21:25]
                 results['l'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
-                training = training_list[12:16] + training_list[21:26]
+                training = training_list[12:16] + training_list[21:25]
                 results['m'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
                 results['n'][i - 1] = results['e'][i - 1]
@@ -475,9 +602,11 @@ def testing():
                 training = training_list[16:31]
                 results['o'][i - 1] = test_evaluation(training, fs, testing_dict, n_comp, n_mix)
 
+                results['p'][i - 1] = knn_experiment(i, fs)
+
             i += 1
 
-        eer = [None] * 15
+        eer = [None] * len(exp)
         i = 0
         for e in exp:
             eer[i] = np.average(results[e])*100
@@ -497,16 +626,50 @@ def testing():
         plt.show()
 
 
+def knn_testing():
+
+    exp = ['p', 'q']
+
+    results = dict()
+    for i in exp:
+        results[i] = [None] * N_USERS
+
+    with open('features_HMM_tolosana.csv', mode='r') as feature_file:
+        feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        i = 0
+        for (fs) in feature_reader:
+            if i > 0:
+
+                print(f"user n#{i}")
+                print(fs)
+                fs.pop()
+
+                results['p'][i - 1] = knn_experiment(i, fs, "skilled")
+                results['q'][i - 1] = knn_experiment(i, fs, "random")
+
+            i += 1
+
+        eer = [None] * len(exp)
+        i = 0
+        for e in exp:
+            eer[i] = np.average(results[e])*100
+            i += 1
+
+        print("average equal error rate for experiment:")
+        print(eer)
+
+
 def start_fs():
 
     for i in range(1, 30):
 
         training_list, testing_dict, training_fs, validation_fs = load_dataset(i)
-        subset, eer = feature_selection(training_fs, validation_fs)
-        with open('features_HMM.csv', mode='a') as feature_file:
+        subset, eer, thresh = feature_selection(training_fs, validation_fs)
+        with open('features_HMM_tolosana.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
             feature_writer.writerow(subset)
 
-testing()
+
+knn_testing()

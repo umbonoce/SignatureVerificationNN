@@ -1,0 +1,379 @@
+import os
+import numpy as np
+import math
+import csv
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.mixture import GaussianMixture
+import warnings
+import random
+from scipy.interpolate import interp1d
+from scipy.optimize import brentq
+from sklearn.metrics import roc_curve
+from sklearn.neighbors import KNeighborsClassifier
+from collections import Counter
+from sklearn.cluster import KMeans
+from sklearn.datasets import make_blobs
+from yellowbrick.cluster import KElbowVisualizer, SilhouetteVisualizer
+
+warnings.filterwarnings("ignore")
+N_USERS = 29
+
+# tanh normalization; values between 0 and 1
+def normalization(data):
+    mean = data.mean()
+    std = data.std()
+    data = 0.5 * (np.tanh(0.01 * ((data - mean) / std)) + 1)
+    return data
+
+
+# time derivative approsimation
+def second_order_regression(data_list):
+    pad_list = data_list.copy()
+    pad_list.append(data_list[len(data_list) - 1])
+    pad_list.append(data_list[len(data_list) - 1])
+    pad_list.insert(0, data_list[0])
+    pad_list.insert(0, data_list[0])
+    derivata = [None] * (len(data_list))
+
+    for n in range(2, len(data_list) + 2):
+        derivata[n - 2] = ((pad_list[n + 1] - pad_list[n - 1] + 2 * (pad_list[n + 2] - pad_list[n - 2])) / 10)
+
+    return derivata
+
+
+def load_dataset(user):
+    training_list = list()  # dictionary of all training dataframes [1..40]
+    testing_dict = {'skilled': [], 'genuine': [], 'random': []}  # dictionary of all testing dataframes [41..56]
+    training_fs_list = list()  # list of training dataframes (feature selection) [alltrain - validation]
+    validation_fs_dict = {'true': [],
+                          'false': []}  # dictionary of validation dataframes (feature selection) [one true for each session, 18 false random]
+    random.seed(42)  # pseudorandomic
+    path = './xLongSignDB/'
+    path_user = path + str(user) + '/'
+    files = os.listdir(path_user)
+    i = 0
+
+    for file in files:
+        df = pd.read_csv(path_user + file, header=0, sep=' ',
+                         names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
+        df = initialize_dataset(df)
+
+        if 'ss' in file:
+            testing_dict['skilled'].append(df)
+
+        elif 'sg' in file:
+            i += 1
+
+            if i > 41:
+                testing_dict['genuine'].append(df)
+            else:
+                training_list.append(df)
+                if i % 4 == 0:
+                    validation_fs_dict['true'].append(df)
+                else:
+                    training_fs_list.append(df)
+
+        else:
+            print(file)
+
+    for i in range(0, 20):
+        numbers = [x for x in range(1, 30)]
+        numbers.remove(user)
+        y = random.choice(numbers)
+        path_user = path + str(y) + '/'
+        files = os.listdir(path_user)
+        z = random.randint(10, 40)
+        df = pd.read_csv(path_user + files[z], header=0, sep=' ',
+                         names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
+        df = initialize_dataset(df)
+        validation_fs_dict['false'].append(df)
+
+    for u in range(1,30):
+        if u != user:
+            path_user = path + str(u) + '/'
+            files = os.listdir(path_user)
+            z = random.randint(10, 40)
+            df = pd.read_csv(path_user + files[z], header=0, sep=' ',
+                             names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
+            df = initialize_dataset(df)
+            testing_dict['random'].append(df)
+
+    return training_list, testing_dict, training_fs_list, validation_fs_dict
+
+
+def initialize_dataset(df):
+    del df['TIMESTAMP']
+    del df['AZIMUTH']
+    del df['ALTITUDE']
+    df = compute_features(df)
+    new_df = pd.DataFrame(data=None)
+    for column in df.columns.values:
+        new_df[column] = normalization(df[column].values)
+    return new_df
+
+
+def compute_features(df):
+    e = np.finfo(np.float32).eps
+    leng = len(df)
+
+    x_list = df['X'].tolist()
+    y_list = df['Y'].tolist()
+    z_list = df['Z'].tolist()  # pression
+    up_list = df['PENSUP'].tolist()
+
+    dx_list = second_order_regression(x_list)
+    dy_list = second_order_regression(y_list)
+
+    theta_list = [None] * leng
+    v_list = [None] * leng  # velocity
+
+    for i in range(0, leng):
+        theta_list[i] = np.arctan(dy_list[i] / (dx_list[i] + e))
+        v_list[i] = np.sqrt(dy_list[i] ** 2 + dx_list[i] ** 2)
+
+    dtheta_list = second_order_regression(theta_list)
+    p_list = [None] * leng  # ro
+    dv_list = second_order_regression(v_list)
+    a_list = [None] * leng  # acceleration
+
+    for i in range(0, leng):
+        dtheta = np.abs(dtheta_list[i] + e)
+        v = np.abs(v_list[i] + e)
+
+        p_list[i] = math.log(v / dtheta)
+        a_list[i] = np.sqrt((dtheta_list[i] * v_list[i]) ** 2 + dv_list[i] ** 2)
+
+    dz_list = second_order_regression(z_list)
+    da_list = second_order_regression(a_list)
+    dp_list = second_order_regression(p_list)
+
+    ddx_list = second_order_regression(dx_list)
+    ddy_list = second_order_regression(dy_list)
+
+    ratios_list = [None] * leng  # np.array([])  Ratio of the minimum over the maximum speed over a 5-samples window
+
+    for n in range(0, leng - 4):
+        vmin = np.amin(v_list[n:n + 4])
+        vmax = np.amax(v_list[n:n + 4]) + e
+        ratios_list[n] = vmin / vmax
+
+    alphas_list = [None] * leng  # Angle of consecutive samples
+
+    for n in range(0, leng - 1):
+        alphas_list[n] = np.arctan((y_list[n + 1] - y_list[n]) / (x_list[n + 1] - x_list[n] + e))
+
+    alphas_list[leng - 1] = alphas_list[leng - 2]
+
+    dalpha_list = second_order_regression(alphas_list)
+    sinalpha_list = np.array(np.sin(alphas_list))
+    cosalpha_list = np.array(np.cos(alphas_list))
+
+    strokeratio5_list = [None] * leng  # Stroke length to width ratio over a 5-samples window
+
+    for n in range(0, leng - 4):
+        stroke_len = np.sum(up_list[n:n + 4])
+        width = np.max(x_list[n:n + 4]) - np.min(x_list[n:n + 4]) + e
+        strokeratio5_list[n] = stroke_len / width
+
+    strokeratio7_list = [None] * leng  # Stroke length to width ratio over a 7-samples window
+
+    for n in range(0, leng - 6):
+        stroke_len = np.sum(up_list[n:n + 6])
+        width = np.max(x_list[n:n + 6]) - np.min(x_list[n:n + 6]) + e
+        strokeratio7_list[n] = stroke_len / width
+
+    df['theta'] = theta_list
+    df['v'] = v_list
+    df['ro'] = p_list
+    df['ac'] = a_list
+    df['dX'] = dx_list
+    df['dY'] = dy_list
+    df['dZ'] = dz_list
+    df['dTheta'] = dtheta_list
+    df['dv'] = dv_list
+    df['dRo'] = dp_list
+    df['dAc'] = da_list
+    df['ddX'] = ddx_list
+    df['ddY'] = ddy_list
+    df['vRatio'] = ratios_list
+    df['alpha'] = alphas_list
+    df['dAlpha'] = dalpha_list
+    df['SIN'] = sinalpha_list
+    df['COS'] = cosalpha_list
+    df['5_WIN'] = strokeratio5_list
+    df['7_WIN'] = strokeratio7_list
+
+    df['vRatio'].fillna(value=df['vRatio'].mean(), inplace=True)
+    df['alpha'].fillna(value=df['alpha'].mean(), inplace=True)
+    df['dAlpha'].fillna(value=df['dAlpha'].mean(), inplace=True)
+    df['SIN'].fillna(value=df['SIN'].mean(), inplace=True)
+    df['COS'].fillna(value=df['COS'].mean(), inplace=True)
+    df['5_WIN'].fillna(value=df['5_WIN'].mean(), inplace=True)
+    df['7_WIN'].fillna(value=df['7_WIN'].mean(), inplace=True)
+    del(df['PENSUP'])
+    return df
+
+
+def kmeans_exp():
+
+    with open('features_GMM.csv', mode='r') as feature_file:
+        feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        i = 0
+        for fs in feature_reader:
+            if i > 0:
+                print(f"user n#{i}")
+                print(fs)
+                fs.pop()
+                df_training = pd.DataFrame()
+                training_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(i)
+                training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
+                for element in training_list:
+                    df_training = df_training.append(element)
+
+                # knn = KNeighborsClassifier()
+                model = KMeans(n_clusters=6, random_state=42).fit(df_training)
+
+
+
+                for signature in testing_dict['genuine']:
+                    cluster = model.predict(signature)
+                    print("testing signature:")
+                    occurences = Counter(cluster)
+                    print(occurences)
+
+                visualizer = SilhouetteVisualizer(model)
+                visualizer.fit(df_training)
+                visualizer.show()
+
+            i+=1
+
+
+def knn_experiment():
+
+    with open('features_GMM.csv', mode='r') as feature_file:
+        feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+        k = 0
+        eer = list()
+        for fs in feature_reader:
+            if k > 0:
+                print(f"user n#{k}")
+                print(fs)
+                fs.pop()
+
+                train_list, testing_dict, training_fs_list, validation_fs_dict = load_dataset(k)
+
+                training_list = [None] * len(train_list)
+                count_training = 0
+
+                for signature in train_list:
+                    training_list[count_training] = signature[fs]
+                    count_training += 1
+
+                knn = KNeighborsClassifier(n_neighbors=5)
+                labels = list()
+                models = list()
+                splits = list()
+
+                splits.append(training_list[0:4])
+                splits.append(training_list[4:8])
+                splits.append(training_list[8:12])
+                splits.append(training_list[12:16])
+                splits.append(training_list[21:25])
+                splits.append(training_list[36:40])
+
+                first = np.sum(len(x) for x in training_list[0:4])
+                second = np.sum(len(x) for x in training_list[4:8])
+                third = np.sum(len(x) for x in training_list[8:12])
+                fourth = np.sum(len(x) for x in training_list[12:16])
+                fifth = np.sum(len(x) for x in training_list[21:25])
+                sixth = np.sum(len(x) for x in training_list[36:40])
+
+                x_train = pd.concat(training_list[0:4])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[4:8])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[8:12])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[12:16])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[21:25])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+                x_train = pd.concat(training_list[36:40])
+                models.append(GaussianMixture(n_components=32, random_state=42).fit(x_train))
+
+                df_training = pd.DataFrame()
+                training_list = training_list[0:16] + training_list[21:25] + training_list[36:40]
+                for element in training_list:
+                    df_training = df_training.append(element)
+
+                labels.extend('1' for counter in range(0, first))
+                labels.extend('2' for counter in range(0, second))
+                labels.extend('3' for counter in range(0, third))
+                labels.extend('4' for counter in range(0, fourth))
+                labels.extend('5' for counter in range(0, fifth))
+                labels.extend('6' for counter in range(0, sixth))
+
+                df_labels = pd.DataFrame(data=labels, columns=['Y'])
+                knn.fit(df_training, df_labels)
+
+                average_training = [None] * len(models)
+                score_test_gen = [None] * len(testing_dict["genuine"])
+                score_test_skilled = [None] * len(testing_dict["skilled"])
+
+                for m in range(0, len(models)):
+                    count_training = 0
+                    score_training = [None] * 4
+                    for signature in splits[m]:
+                        score_training[count_training] = models[m].score(signature)
+                        count_training += 1
+                    average_training[m] = np.average(score_training)
+
+                i = 0
+                for signature in testing_dict["genuine"]:
+                    a = signature[fs]
+                    score = knn.predict(a)
+                    occurrences = Counter(score)
+                    print(occurrences)
+                    index = int(max(occurrences, key=occurrences.get)) - 1
+                    score = models[index].score(a)
+                    distance = np.abs(score - average_training[index])
+                    score_test_gen[i] = np.exp(distance * (-1)/len(fs))
+                    i += 1
+
+                i = 0
+                for signature in testing_dict["skilled"]:
+                    a = signature[fs]
+                    score = knn.predict(a)
+                    occurrences = Counter(score)
+                    print(occurrences)
+                    index = int(max(occurrences, key=occurrences.get)) - 1
+                    score = models[index].score(a)
+                    distance = np.abs(score - average_training[index])
+                    score_test_skilled[i] = np.exp(distance *(-1)/len(fs))
+                    i += 1
+
+                i = 0
+                for score in score_test_gen:
+                    i += 1
+                    print(f" prob signature testing genuine {i}: {score}")
+
+                i = 0
+                for score in score_test_skilled:
+                    i += 1
+                    print(f" prob signature testing skilled {i}: {score}")
+
+                labels = [1] * len(score_test_gen) + [0] * len(score_test_skilled)
+                probs = np.concatenate([score_test_gen, score_test_skilled])
+                fpr, tpr, thresh = roc_curve(labels, probs)
+                equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
+                threshold = interp1d(fpr, thresh)(equal_error_rate)
+                print(f"threshold: {threshold} eer: {equal_error_rate}")
+                eer.append(equal_error_rate)
+
+            k += 1
+        average_eer = np.average(eer)
+        print(average_eer)
+
+
+knn_experiment()
