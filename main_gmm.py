@@ -14,6 +14,9 @@ from sklearn.neighbors import KNeighborsClassifier
 from collections import Counter
 warnings.filterwarnings("ignore")
 np.random.seed(42)  # pseudorandomic
+warnings.filterwarnings("ignore")
+np.random.seed(42)  # pseudorandomic
+
 N_USERS = 29
 
 # tanh normalization; values between 0 and 1
@@ -100,6 +103,7 @@ def load_dataset(user):
                              names=['X', 'Y', 'TIMESTAMP', 'PENSUP', 'AZIMUTH', 'ALTITUDE', 'Z'])
             df = initialize_dataset(df)
             testing_dict['random'].append(df)
+
 
     return training_list, testing_dict, training_fs_list, validation_fs_dict
 
@@ -227,6 +231,7 @@ def feature_selection(training_set, validation_set):
 
         best_score = 1
         best_trust = 0
+
         best_feature = ""
         feature_set = subset.copy()
 
@@ -236,6 +241,9 @@ def feature_selection(training_set, validation_set):
             feature_set.remove(f)
             if (score < best_score) or (score == best_score and trust > best_trust):
                 best_trust = trust
+            score = evaluate_score(training_set, validation_set, list(feature_set))
+            feature_set.remove(f)
+            if score < best_score:
                 best_score = score
                 best_feature = f
 
@@ -248,6 +256,7 @@ def feature_selection(training_set, validation_set):
 
         still_remove = True
         first_time = True
+
 
         while still_remove:
 
@@ -280,6 +289,7 @@ def feature_selection(training_set, validation_set):
                 still_remove = False
 
     return subset, best_score, best_trust
+
 
 
 
@@ -352,11 +362,13 @@ def evaluate_score(train_set,valid_set, features):
     except:
         equal_error_rate = 1
         threshold = 0
+
         print("Fit Training Error")
 
     print(f"equal error rate: {equal_error_rate}")
 
     return equal_error_rate,threshold
+
 
 
 def test_evaluation(train_set, features, valid_set, n_mix):
@@ -414,6 +426,7 @@ def test_evaluation(train_set, features, valid_set, n_mix):
             print(f" prob signature testing skilled {i}: {score}")
 
         labels = [1] * len(score_test_gen) + [0] * len(score_test_skilled)
+
         probs = np.concatenate([score_test_gen, score_test_skilled])
         fpr, tpr, thresh = roc_curve(labels, probs)
         equal_error_rate = brentq(lambda x: 1. - x - interp1d(fpr, tpr)(x), 0., 1.)
@@ -543,7 +556,6 @@ def knn_experiment(k, fs):
 def testing():
 
     exp = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p']
-
     results = dict()
     for i in exp:
         results[i] = [None] * N_USERS
@@ -562,6 +574,7 @@ def testing():
 
                 n_mix = 32
                 training = training_list[0:4]
+
                 results['a'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
                 training = training_list[4:8]
@@ -583,6 +596,7 @@ def testing():
 
                 n_mix = 128
                 training = training_list[0:16]
+                
                 results['h'][i - 1] = test_evaluation(training, fs, testing_dict,n_mix)
 
                 training = training_list[0:31]
@@ -765,14 +779,15 @@ def start_fs():
         training_list, testing_dict, training_fs, validation_fs = load_dataset(i)
         subset, eer, thr = feature_selection(training_fs, validation_fs)
         with open('features_GMM_tolosana.csv', mode='a') as feature_file:
+        subset, eer = feature_selection(training_fs, validation_fs)
+        with open('features_GMM.csv', mode='a') as feature_file:
             feature_writer = csv.writer(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             subset = list(subset)
             subset.append(eer)
             feature_writer.writerow(subset)
 
 
-eer_1 = knn_testing("skilled")
-eer_2 = knn_testing("random")
+#eer_1 = knn_testing("skilled")
+#eer_2 = knn_testing("random")
 
-print(eer_1)
-print(eer_2)
+testing()
