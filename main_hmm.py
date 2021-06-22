@@ -541,7 +541,7 @@ def testing():
     for i in exp:
         results[i] = [None] * N_USERS
 
-    with open('features_HMM_tolosana.csv', mode='r') as feature_file:
+    with open('features_HMM.csv', mode='r') as feature_file:
         feature_reader = csv.reader(feature_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
         i = 0
         for (fs) in feature_reader:
